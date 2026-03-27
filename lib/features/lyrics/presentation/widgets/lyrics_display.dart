@@ -143,6 +143,8 @@ class _LyricsDisplayState extends ConsumerState<LyricsDisplay> {
             return ListView.builder(
               controller: _scrollController,
               itemCount: lyrics.lines.length,
+              // 强制每行歌词高度一致，确保 _scrollToLine 的偏移计算精确匹配实际布局
+              itemExtent: _itemHeight,
               // 上下留白，让首尾歌词行也能居中
               padding: EdgeInsets.symmetric(
                 vertical: constraints.maxHeight / 2 - _itemHeight / 2,
@@ -153,19 +155,23 @@ class _LyricsDisplayState extends ConsumerState<LyricsDisplay> {
 
                 return Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    line.text,
-                    textAlign: TextAlign.center,
-                    style: isCurrent
-                        ? textTheme.titleMedium?.copyWith(
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.w600,
-                          )
-                        : textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.6),
-                          ),
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Center(
+                    child: Text(
+                      line.text,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: isCurrent
+                          ? textTheme.titleMedium?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            )
+                          : textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.6),
+                            ),
+                    ),
                   ),
                 );
               },

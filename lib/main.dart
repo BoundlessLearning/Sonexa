@@ -4,6 +4,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:ohmymusic/core/audio/audio_handler.dart';
 import 'package:ohmymusic/core/database/app_database.dart';
@@ -19,6 +20,19 @@ Future<void> main() async {
 
   // Linux/Windows 需要 media_kit 后端来支持 just_audio
   if (Platform.isLinux || Platform.isWindows) {
+    // 确保 MPV 磁盘缓存目录存在，避免 lavf "No cache data directory" 错误。
+    // media_kit 默认启用 cache-on-disk 但不设置 cache-dir，
+    // 需要预先创建目录供 MPV 使用。
+    try {
+      final cacheDir = await getTemporaryDirectory();
+      final mpvCacheDir = Directory('${cacheDir.path}/mpv_cache');
+      if (!mpvCacheDir.existsSync()) {
+        mpvCacheDir.createSync(recursive: true);
+      }
+    } catch (_) {
+      // 缓存目录创建失败不影响播放功能，仅会产生控制台警告
+    }
+
     // 优先使用与可执行文件同目录下 lib/ 中的 libmpv（打包分发场景）
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final bundledMpv = '$exeDir/lib/libmpv.so';
