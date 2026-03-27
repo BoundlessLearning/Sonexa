@@ -423,7 +423,7 @@ class _PlayModeButton extends ConsumerWidget {
       iconSize: 24,
       color: color,
       tooltip: tooltip,
-      onPressed: () {
+      onPressed: () async {
         // 循环切换：sequential → shuffle → repeatOne → repeatAll → sequential
         final nextMode = switch (mode) {
           PlayMode.sequential => PlayMode.shuffle,
@@ -433,20 +433,23 @@ class _PlayModeButton extends ConsumerWidget {
         };
         ref.read(playModeProvider.notifier).state = nextMode;
 
-        // 将播放模式同步到音频处理器
+        // [Round8-F1] 将播放模式同步到音频处理器。
+        // 必须 await setShuffle()，因为它可能触发 _rebuildAudioSource()
+        // （从 shuffle 切到其他模式时），需要等它完成后再设置 repeat mode，
+        // 避免并发导致进度条短暂归零闪烁。
         switch (nextMode) {
           case PlayMode.sequential:
-            audioHandler.setShuffle(false);
-            audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
+            await audioHandler.setShuffle(false);
+            await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
           case PlayMode.shuffle:
-            audioHandler.setShuffle(true);
-            audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
+            await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
+            await audioHandler.setShuffle(true);
           case PlayMode.repeatOne:
-            audioHandler.setShuffle(false);
-            audioHandler.setRepeatMode(AudioServiceRepeatMode.one);
+            await audioHandler.setShuffle(false);
+            await audioHandler.setRepeatMode(AudioServiceRepeatMode.one);
           case PlayMode.repeatAll:
-            audioHandler.setShuffle(false);
-            audioHandler.setRepeatMode(AudioServiceRepeatMode.all);
+            await audioHandler.setShuffle(false);
+            await audioHandler.setRepeatMode(AudioServiceRepeatMode.all);
         }
       },
     );

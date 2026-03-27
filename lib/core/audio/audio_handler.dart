@@ -21,6 +21,14 @@ class MusicAudioHandler extends BaseAudioHandler
 
   bool _skipInProgress = false;
 
+  // ── [Round8-F3] 自维护 currentIndex ──
+  // _player.currentIndex 依赖 just_audio 的异步 stream pipeline
+  // （playbackEvent → _currentIndexSubject → sequenceState），
+  // 在 auto-advance 后可能尚未更新。用户此时点击"下一首"会读到旧值。
+  // 解决方案：在 sequenceStateStream 回调中维护自己的 _currentIndex，
+  // skipToNext/skipToPrevious 使用此值而非 _player.currentIndex。
+  int _currentIndex = 0;
+
   // ── 手动 Shuffle 实现 ──
   // just_audio_media_kit 的 setShuffleModeEnabled(true) 会破坏 currentIndex
   // （参见 just_audio_media_kit#3），所以我们不用它的 shuffle 功能，
@@ -81,17 +89,22 @@ class MusicAudioHandler extends BaseAudioHandler
   /// [F2 修复] 监听 sequenceStateStream，从 currentSource.tag 获取 MediaItem。
   /// 不做 ID 去重——直接 add，让 BehaviorSubject 的 downstream 自己 distinct()。
   /// 根因：之前的 ID 去重在 _safeSkipToIndex 提前 add 后，stream 回调被吞掉。
+  /// [Round8-F3] 同时更新 _currentIndex，使 skipToNext/skipToPrevious
+  /// 始终使用最新的曲目索引，不依赖 _player.currentIndex 的异步管道。
   void _listenToCurrentIndex() {
     _player.sequenceStateStream.listen((sequenceState) {
       if (sequenceState == null || sequenceState.currentSource == null) return;
       final tag = sequenceState.currentSource!.tag;
+      final idx = sequenceState.currentIndex;
       if (tag is MediaItem) {
+        // 更新自维护的 currentIndex
+        _currentIndex = idx;
         // 直接发送，不做去重。
         // sequenceStateStream 在 seek(index:), auto-advance, seekToNext() 等
         // 场景都会触发，确保 UI 总是反映当前实际播放的曲目。
         mediaItem.add(tag);
         dev.log('mediaItem updated from sequenceState: '
-            '${tag.title} (index=${sequenceState.currentIndex})');
+            '${tag.title} (index=$idx)');
       }
     });
   }
@@ -112,7 +125,6 @@ class MusicAudioHandler extends BaseAudioHandler
       if (state.processingState == ProcessingState.idle &&
           !_skipInProgress &&
           queue.value.isNotEmpty &&
-          _player.currentIndex != null &&
           !state.playing) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (_player.processingState == ProcessingState.idle &&
@@ -232,6 +244,9 @@ class MusicAudioHandler extends BaseAudioHandler
       _playlist = ConcatenatingAudioSource(children: sources);
       await _player.setAudioSource(_playlist, initialIndex: initialIndex);
 
+      // 同步自维护的 _currentIndex
+      _currentIndex = initialIndex;
+
       // 初始 mediaItem 立即设置，不等 stream —— 只在 loadAndPlay 时做。
       if (initialIndex >= 0 && initialIndex < items.length) {
         mediaItem.add(items[initialIndex]);
@@ -254,6 +269,7 @@ class MusicAudioHandler extends BaseAudioHandler
         try {
           await _player.setAudioSource(_playlist,
               initialIndex: initialIndex + 1);
+          _currentIndex = initialIndex + 1;
           if (initialIndex + 1 < items.length) {
             mediaItem.add(items[initialIndex + 1]);
           }
@@ -296,14 +312,14 @@ class MusicAudioHandler extends BaseAudioHandler
   }
 
   /// [Round7-F1] skipToNext 使用手动索引计算。
-  /// 因为我们用手动 shuffle（物理打乱队列），currentIndex 就是顺序索引，
-  /// 不再依赖 just_audio 的 effectiveIndices（在 media_kit 上有 bug）。
+  /// [Round8-F3] 使用自维护的 _currentIndex 而非 _player.currentIndex，
+  /// 避免 auto-advance 后 _player.currentIndex 尚未更新导致的跳转错误。
   @override
   Future<void> skipToNext() async {
     if (_skipInProgress) return;
     _skipInProgress = true;
     try {
-      final currentIdx = _player.currentIndex ?? 0;
+      final currentIdx = _currentIndex;
       final total = queue.value.length;
       if (total == 0) return;
 
@@ -319,12 +335,14 @@ class MusicAudioHandler extends BaseAudioHandler
       }
 
       await _player.seek(Duration.zero, index: nextIdx);
+      // 立即更新自维护的 _currentIndex，不等 sequenceStateStream 异步回调
+      _currentIndex = nextIdx;
       dev.log('skipToNext: $currentIdx → $nextIdx');
       // mediaItem 更新由 _listenToCurrentIndex() 的 sequenceStateStream 驱动
     } catch (e, st) {
       dev.log('skipToNext() failed: $e', error: e, stackTrace: st);
       // 回退：用 setAudioSource 强制跳转
-      final nextIdx = (_player.currentIndex ?? 0) + 1;
+      final nextIdx = _currentIndex + 1;
       if (nextIdx < queue.value.length) {
         await _forceSkipToIndex(nextIdx);
       }
@@ -333,7 +351,8 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// [Round7-F1] skipToPrevious 使用手动索引计算，理由同上。
+  /// [Round7-F1] skipToPrevious 使用手动索引计算。
+  /// [Round8-F3] 使用自维护的 _currentIndex，理由同 skipToNext。
   @override
   Future<void> skipToPrevious() async {
     if (_skipInProgress) return;
@@ -345,7 +364,7 @@ class MusicAudioHandler extends BaseAudioHandler
         return;
       }
 
-      final currentIdx = _player.currentIndex ?? 0;
+      final currentIdx = _currentIndex;
       final total = queue.value.length;
       if (total == 0) return;
 
@@ -361,10 +380,12 @@ class MusicAudioHandler extends BaseAudioHandler
       }
 
       await _player.seek(Duration.zero, index: prevIdx);
+      // 立即更新自维护的 _currentIndex
+      _currentIndex = prevIdx;
       dev.log('skipToPrevious: $currentIdx → $prevIdx');
     } catch (e, st) {
       dev.log('skipToPrevious() failed: $e', error: e, stackTrace: st);
-      final prevIndex = (_player.currentIndex ?? 1) - 1;
+      final prevIndex = _currentIndex - 1;
       if (prevIndex >= 0) {
         await _forceSkipToIndex(prevIndex);
       }
@@ -404,7 +425,7 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 播放出错时尝试跳到下一首；如果已是最后一首则停止
   void _trySkipOnError() {
     if (_skipInProgress) return;
-    final currentIdx = _player.currentIndex ?? 0;
+    final currentIdx = _currentIndex;
     final total = queue.value.length;
     if (currentIdx < total - 1) {
       dev.log('Auto-skipping from $currentIdx to ${currentIdx + 1} after error');
@@ -415,11 +436,12 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// 播放恢复失败时，重新加载当前曲目并从上次位置继续播放。
+  /// [Round8-F5] 播放恢复失败时，用全新的 AudioSource 重新加载当前曲目。
+  /// 重建 _playlist 以确保 HTTP 连接是全新的（解决长时间暂停后连接断开的问题）。
   Future<void> _retryCurrentTrack() async {
-    final currentIdx = _player.currentIndex;
+    final currentIdx = _currentIndex;
     final items = queue.value;
-    if (currentIdx == null || currentIdx < 0 || currentIdx >= items.length) {
+    if (currentIdx < 0 || currentIdx >= items.length) {
       _trySkipOnError();
       return;
     }
@@ -428,8 +450,12 @@ class MusicAudioHandler extends BaseAudioHandler
     dev.log('Retrying current track at index $currentIdx, position=$resumePosition');
 
     try {
-      // 重新设置音频源到当前索引
+      // 用全新的 AudioSource 实例重建 _playlist，
+      // 确保 HTTP 连接是全新建立的
+      final sources = items.map(_audioSourceFromItem).toList();
+      _playlist = ConcatenatingAudioSource(children: sources);
       await _player.setAudioSource(_playlist, initialIndex: currentIdx);
+      _currentIndex = currentIdx;
       // 恢复到上次播放的位置
       if (resumePosition > Duration.zero) {
         await _player.seek(resumePosition);
@@ -441,20 +467,36 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// 尝试恢复播放器：在音频设备丢失等严重错误后重建播放器。
+  /// [Round8-F5] 尝试恢复播放器：在音频设备丢失、长时间暂停后连接断开等
+  /// 严重错误后重建播放器。
+  /// 与之前的实现不同，这里会用 queue.value 重新创建 _playlist（全新的
+  /// AudioSource.uri 实例），避免使用已经断开 HTTP 连接的旧 AudioSource 对象。
   Future<void> _attemptRecovery() async {
-    final currentIdx = _player.currentIndex;
+    final currentIdx = _currentIndex;
     final position = _player.position;
     final wasPlaying = _player.playing;
+    final items = queue.value;
 
-    dev.log('Attempting player recovery: index=$currentIdx, position=$position');
+    dev.log('Attempting player recovery: index=$currentIdx, position=$position, '
+        'queueSize=${items.length}');
+
+    if (items.isEmpty) return;
 
     try {
-      // 重新设置音频源并恢复位置
-      await _player.setAudioSource(_playlist, initialIndex: currentIdx ?? 0);
+      // 用 queue 中的 MediaItem 重新创建全新的 AudioSource 实例。
+      // 这确保 HTTP 连接是全新建立的，不复用可能已断开的旧连接。
+      final sources = items.map(_audioSourceFromItem).toList();
+      _playlist = ConcatenatingAudioSource(children: sources);
+
+      final safeIdx = currentIdx.clamp(0, items.length - 1);
+      await _player.setAudioSource(_playlist, initialIndex: safeIdx);
       if (position > Duration.zero) {
         await _player.seek(position);
       }
+      // 手动同步 mediaItem
+      mediaItem.add(items[safeIdx]);
+      _currentIndex = safeIdx;
+
       if (wasPlaying) {
         await _player.play();
       }
@@ -483,8 +525,8 @@ class MusicAudioHandler extends BaseAudioHandler
 
     try {
       await _player.setAudioSource(_playlist, initialIndex: index);
-      // forceSkip 是最后兜底手段，需要手动更新 mediaItem
-      // 因为 setAudioSource 会触发 sequenceStateStream，但以防万一也手动设置
+      // forceSkip 是最后兜底手段，需要手动更新 mediaItem 和 _currentIndex
+      _currentIndex = index;
       mediaItem.add(items[index]);
       await _player.play();
     } catch (e, st) {
@@ -586,6 +628,8 @@ class MusicAudioHandler extends BaseAudioHandler
     final sources = items.map(_audioSourceFromItem).toList();
     _playlist = ConcatenatingAudioSource(children: sources);
     await _player.setAudioSource(_playlist, initialIndex: initialIndex);
+    // 同步自维护的 _currentIndex
+    _currentIndex = initialIndex;
     if (position > Duration.zero) {
       await _player.seek(position);
     }
