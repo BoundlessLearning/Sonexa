@@ -25,21 +25,25 @@ final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
   );
 });
 
-/// 根据当前播放中的媒体信息拉取对应歌词。
+/// [Round7-F3] 根据歌曲 ID 拉取对应歌词。
+/// 不再从 audioHandler.mediaItem.valueOrNull 做交叉校验——
+/// songId 来自 currentSongIdProvider（由 mediaItem stream 驱动），
+/// 如果 mediaItem 已更新到新歌曲，旧的 songId 的 provider 会被自动 dispose。
+/// 之前的交叉校验在 mediaItem 更新时序不一致时会返回 null 导致歌词消失。
 final lyricsProvider = FutureProvider.family<Lyrics?, String>((ref, songId) async {
   final audioHandler = ref.read(audioHandlerProvider);
   final mediaItem = audioHandler.mediaItem.valueOrNull;
-  if (mediaItem == null) {
-    return null;
-  }
 
-  final currentSongId = mediaItem.extras?['songId'] as String? ?? mediaItem.id;
-  if (currentSongId != songId) {
-    return null;
+  // 从 mediaItem 获取 artist/title 用于歌词搜索
+  // 如果 mediaItem 的 songId 与请求的 songId 一致，用其 artist/title
+  // 否则只用 songId 查本地缓存（无法搜 lrclib）
+  String artist = '';
+  String title = '';
+  final currentSongId = mediaItem?.extras?['songId'] as String? ?? mediaItem?.id;
+  if (currentSongId == songId && mediaItem != null) {
+    artist = (mediaItem.artist ?? '').trim();
+    title = mediaItem.title.trim();
   }
-
-  final artist = (mediaItem.artist ?? '').trim();
-  final title = mediaItem.title.trim();
 
   // 超过 8 秒未获取到歌词则放弃，UI 会显示"暂无歌词"。
   try {

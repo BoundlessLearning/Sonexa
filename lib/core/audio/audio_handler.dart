@@ -17,9 +17,17 @@ class MusicAudioHandler extends BaseAudioHandler
 
   // ignore: prefer_final_fields — 播放器可能需要在严重错误后重建
   AudioPlayer _player;
-  final ConcatenatingAudioSource _playlist;
+  ConcatenatingAudioSource _playlist;
 
   bool _skipInProgress = false;
+
+  // ── 手动 Shuffle 实现 ──
+  // just_audio_media_kit 的 setShuffleModeEnabled(true) 会破坏 currentIndex
+  // （参见 just_audio_media_kit#3），所以我们不用它的 shuffle 功能，
+  // 而是手动打乱队列顺序并重建 ConcatenatingAudioSource。
+  bool _shuffleEnabled = false;
+  /// shuffle 模式下保存的原始（未打乱的）队列顺序，用于恢复。
+  List<MediaItem> _originalQueue = [];
 
   // ── 播放健康监控（Bug #4：进度条在走但没有声音） ──
   Timer? _healthCheckTimer;
@@ -32,6 +40,9 @@ class MusicAudioHandler extends BaseAudioHandler
   Stream<Duration?> get durationStream => _player.durationStream;
   Stream<int?> get currentIndexStream => _player.currentIndexStream;
   Stream<bool> get playingStream => _player.playingStream;
+
+  /// 当前是否处于手动 shuffle 模式
+  bool get shuffleEnabled => _shuffleEnabled;
 
   Future<void> _init() async {
     final session = await AudioSession.instance;
@@ -83,19 +94,6 @@ class MusicAudioHandler extends BaseAudioHandler
             '${tag.title} (index=${sequenceState.currentIndex})');
       }
     });
-  }
-
-  /// [F3 修复] 从 sequenceState.currentSource.tag 获取当前曲目，
-  /// 不再从 queue.value[_player.currentIndex] 读。
-  /// 根因：queue.value 是原始插入顺序，_player.currentIndex 在 shuffle
-  /// 时是 effectiveIndices 空间的索引，两者不匹配。
-  void _syncCurrentMediaItem() {
-    final sequenceState = _player.sequenceState;
-    if (sequenceState == null || sequenceState.currentSource == null) return;
-    final tag = sequenceState.currentSource!.tag;
-    if (tag is MediaItem) {
-      mediaItem.add(tag);
-    }
   }
 
   /// 监听播放处理状态，在完成或出错时自动跳到下一首
@@ -217,6 +215,9 @@ class MusicAudioHandler extends BaseAudioHandler
     List<MediaItem> items, {
     int initialIndex = 0,
   }) async {
+    // 新队列加载时重置 shuffle 状态
+    _originalQueue = [];
+
     queue.add(items);
 
     if (items.isEmpty) {
@@ -228,8 +229,7 @@ class MusicAudioHandler extends BaseAudioHandler
     final sources = items.map(_audioSourceFromItem).toList();
 
     try {
-      await _playlist.clear();
-      await _playlist.addAll(sources);
+      _playlist = ConcatenatingAudioSource(children: sources);
       await _player.setAudioSource(_playlist, initialIndex: initialIndex);
 
       // 初始 mediaItem 立即设置，不等 stream —— 只在 loadAndPlay 时做。
@@ -237,7 +237,14 @@ class MusicAudioHandler extends BaseAudioHandler
         mediaItem.add(items[initialIndex]);
       }
 
-      await play();
+      // 如果当前 shuffle 模式已开启，立即打乱
+      if (_shuffleEnabled) {
+        // 先保存原始顺序，再触发 shuffle 逻辑
+        _shuffleEnabled = false; // 临时关闭，让 setShuffle 能正确执行
+        await setShuffle(true);
+      } else {
+        await play();
+      }
     } catch (e, st) {
       dev.log('loadAndPlay failed at index $initialIndex: $e',
           error: e, stackTrace: st);
@@ -288,31 +295,34 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// [F1 修复] 使用 just_audio 内置的 seekToNext()。
-  /// seekToNext() 内部调用 seek(Duration.zero, index: nextIndex)，
-  /// 其中 nextIndex 走 effectiveIndices，正确处理 shuffle + loopMode。
-  /// 不再手工计算 currentIndex + 1 —— 那在 currentIndex 未及时更新时
-  /// 总是返回 0+1=1，导致"永远跳到第二首"。
+  /// [Round7-F1] skipToNext 使用手动索引计算。
+  /// 因为我们用手动 shuffle（物理打乱队列），currentIndex 就是顺序索引，
+  /// 不再依赖 just_audio 的 effectiveIndices（在 media_kit 上有 bug）。
   @override
   Future<void> skipToNext() async {
     if (_skipInProgress) return;
     _skipInProgress = true;
     try {
-      if (_player.hasNext) {
-        await _player.seekToNext();
-        dev.log('skipToNext: seekToNext() succeeded, '
-            'newIndex=${_player.currentIndex}');
-      } else if (_player.loopMode == LoopMode.all &&
-          queue.value.isNotEmpty) {
+      final currentIdx = _player.currentIndex ?? 0;
+      final total = queue.value.length;
+      if (total == 0) return;
+
+      int nextIdx;
+      if (currentIdx < total - 1) {
+        nextIdx = currentIdx + 1;
+      } else if (_player.loopMode == LoopMode.all) {
         // 列表循环模式下，末尾回到第一首
-        await _player.seek(Duration.zero, index: 0);
-        dev.log('skipToNext: wrapped to index 0 (loopMode=all)');
+        nextIdx = 0;
       } else {
         dev.log('skipToNext: no next track available');
+        return;
       }
+
+      await _player.seek(Duration.zero, index: nextIdx);
+      dev.log('skipToNext: $currentIdx → $nextIdx');
+      // mediaItem 更新由 _listenToCurrentIndex() 的 sequenceStateStream 驱动
     } catch (e, st) {
-      dev.log('skipToNext() seekToNext failed: $e',
-          error: e, stackTrace: st);
+      dev.log('skipToNext() failed: $e', error: e, stackTrace: st);
       // 回退：用 setAudioSource 强制跳转
       final nextIdx = (_player.currentIndex ?? 0) + 1;
       if (nextIdx < queue.value.length) {
@@ -323,8 +333,7 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// [F1 修复] 使用 just_audio 内置的 seekToPrevious()。
-  /// 同理不再手工计算 currentIndex - 1。
+  /// [Round7-F1] skipToPrevious 使用手动索引计算，理由同上。
   @override
   Future<void> skipToPrevious() async {
     if (_skipInProgress) return;
@@ -335,19 +344,24 @@ class MusicAudioHandler extends BaseAudioHandler
         await _player.seek(Duration.zero);
         return;
       }
-      if (_player.hasPrevious) {
-        await _player.seekToPrevious();
-        dev.log('skipToPrevious: seekToPrevious() succeeded, '
-            'newIndex=${_player.currentIndex}');
-      } else if (_player.loopMode == LoopMode.all &&
-          queue.value.isNotEmpty) {
+
+      final currentIdx = _player.currentIndex ?? 0;
+      final total = queue.value.length;
+      if (total == 0) return;
+
+      int prevIdx;
+      if (currentIdx > 0) {
+        prevIdx = currentIdx - 1;
+      } else if (_player.loopMode == LoopMode.all) {
         // 列表循环模式下，开头回到最后一首
-        final lastIdx = queue.value.length - 1;
-        await _player.seek(Duration.zero, index: lastIdx);
-        dev.log('skipToPrevious: wrapped to index $lastIdx (loopMode=all)');
+        prevIdx = total - 1;
       } else {
         dev.log('skipToPrevious: no previous track available');
+        return;
       }
+
+      await _player.seek(Duration.zero, index: prevIdx);
+      dev.log('skipToPrevious: $currentIdx → $prevIdx');
     } catch (e, st) {
       dev.log('skipToPrevious() failed: $e', error: e, stackTrace: st);
       final prevIndex = (_player.currentIndex ?? 1) - 1;
@@ -501,20 +515,84 @@ class MusicAudioHandler extends BaseAudioHandler
     return _player.setLoopMode(loopMode);
   }
 
-  /// 切换 shuffle 模式。
-  /// 注意：just_audio_media_kit 不完全支持 just_audio 的 shuffleOrder。
-  /// 当前实现使用 just_audio 的 setShuffleModeEnabled + shuffle()，
-  /// 并通过 _syncCurrentMediaItem() 从 sequenceState.currentSource.tag 同步，
-  /// 避免 queue.value 和 effectiveIndices 的索引空间不匹配问题。
+  /// [Round7-F1] 手动 Shuffle 实现。
+  /// 不调用 _player.setShuffleModeEnabled() / _player.shuffle()，
+  /// 因为 just_audio_media_kit#3 会导致 currentIndex 错乱。
+  /// 改为：物理打乱 ConcatenatingAudioSource 的子项顺序，
+  /// 当前播放曲目始终放在 index=0，然后 setAudioSource() 重新加载。
+  /// 关闭 shuffle 时恢复原始队列顺序，定位到当前播放曲目的原始位置。
   Future<void> setShuffle(bool enabled) async {
-    try {
-      await _player.setShuffleModeEnabled(enabled);
-      if (enabled) {
-        await _player.shuffle();
+    if (enabled == _shuffleEnabled) return;
+    _shuffleEnabled = enabled;
+
+    final currentItems = queue.value;
+    if (currentItems.isEmpty) return;
+
+    // 获取当前正在播放的曲目（通过 tag，不依赖 currentIndex）
+    final currentTag = _player.sequenceState?.currentSource?.tag as MediaItem?;
+    final wasPlaying = _player.playing;
+    final currentPosition = _player.position;
+
+    if (enabled) {
+      // ── 启用 Shuffle ──
+      // 1. 保存原始队列顺序（用于恢复）
+      _originalQueue = List<MediaItem>.from(currentItems);
+      // 2. 创建打乱后的队列（当前曲目放 index=0）
+      final shuffled = List<MediaItem>.from(currentItems);
+      shuffled.shuffle();
+      // 把当前播放的曲目移到最前面
+      if (currentTag != null) {
+        shuffled.removeWhere((item) =>
+            item.extras?['songId'] == currentTag.extras?['songId']);
+        shuffled.insert(0, currentTag);
       }
-    } finally {
-      // shuffle 完成后，确保 mediaItem 反映真正在播放的曲目
-      _syncCurrentMediaItem();
+      // 3. 更新 queue + 重建 audio source
+      queue.add(shuffled);
+      await _rebuildAudioSource(shuffled, 0, currentPosition);
+      dev.log('setShuffle(true): shuffled ${shuffled.length} items, '
+          'current="${currentTag?.title}" at index=0');
+    } else {
+      // ── 关闭 Shuffle ──
+      if (_originalQueue.isEmpty) return;
+      // 找到当前曲目在原始队列中的位置
+      int restoredIndex = 0;
+      if (currentTag != null) {
+        final songId = currentTag.extras?['songId'];
+        restoredIndex = _originalQueue.indexWhere(
+            (item) => item.extras?['songId'] == songId);
+        if (restoredIndex < 0) restoredIndex = 0;
+      }
+      // 恢复原始队列
+      queue.add(List<MediaItem>.from(_originalQueue));
+      await _rebuildAudioSource(_originalQueue, restoredIndex, currentPosition);
+      dev.log('setShuffle(false): restored original order, '
+          'current="${currentTag?.title}" at index=$restoredIndex');
+      _originalQueue = [];
+    }
+
+    // 恢复播放状态
+    if (wasPlaying) {
+      await _player.play();
+    }
+  }
+
+  /// 重建 ConcatenatingAudioSource 并设置到播放器。
+  /// 保持 [initialIndex] 位置和 [position] 进度不变。
+  Future<void> _rebuildAudioSource(
+    List<MediaItem> items,
+    int initialIndex,
+    Duration position,
+  ) async {
+    final sources = items.map(_audioSourceFromItem).toList();
+    _playlist = ConcatenatingAudioSource(children: sources);
+    await _player.setAudioSource(_playlist, initialIndex: initialIndex);
+    if (position > Duration.zero) {
+      await _player.seek(position);
+    }
+    // 手动同步 mediaItem（setAudioSource 会触发 sequenceStateStream，
+    // 但以防时序问题，这里也显式设置一次）
+    if (initialIndex >= 0 && initialIndex < items.length) {
+      mediaItem.add(items[initialIndex]);
     }
   }
 
@@ -527,6 +605,10 @@ class MusicAudioHandler extends BaseAudioHandler
     final updatedQueue = [...queue.value, item];
     queue.add(updatedQueue);
     await _playlist.add(_audioSourceFromItem(item));
+    // shuffle 模式下也同步到原始队列
+    if (_shuffleEnabled) {
+      _originalQueue = [..._originalQueue, item];
+    }
   }
 
   Future<void> removeFromQueue(int index) async {
@@ -535,9 +617,16 @@ class MusicAudioHandler extends BaseAudioHandler
       return;
     }
 
+    final removedItem = currentQueue[index];
     currentQueue.removeAt(index);
     queue.add(currentQueue);
     await _playlist.removeAt(index);
+
+    // shuffle 模式下也从原始队列中移除
+    if (_shuffleEnabled && _originalQueue.isNotEmpty) {
+      _originalQueue.removeWhere((item) =>
+          item.extras?['songId'] == removedItem.extras?['songId']);
+    }
 
     if (currentQueue.isEmpty) {
       mediaItem.add(null);

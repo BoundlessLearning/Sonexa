@@ -75,21 +75,28 @@ class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
     int? index,
   ) async {
     // 使用 audioHandler.mediaItem 获取当前播放的曲目，
-    // 而非 queue[index]，因为在随机播放模式下 currentIndex 对应的是
-    // shuffle 后的逻辑顺序，直接用它作为原始 queue 的下标会取到错误的歌曲。
+    // 而非 queue[index]，因为在手动 shuffle 模式下 queue 已物理打乱，
+    // currentIndex 对应的就是 queue 中的正确位置。
     final nextItem = audioHandler.mediaItem.valueOrNull;
 
     final previousItem = _lastPlayedItem;
     final previousStartTime = _lastSongStartTime;
 
+    // [Round7-F4] 如果歌曲 ID 没变，说明是 shuffle/seek/恢复等操作触发的
+    // index 变化，不是真正的切歌，跳过历史记录。
+    final nextSongId = nextItem?.extras?['songId'] as String? ?? nextItem?.id;
+    final prevSongId = previousItem?.extras?['songId'] as String? ?? previousItem?.id;
+    if (nextSongId != null && nextSongId == prevSongId) {
+      return;
+    }
+
     if (previousItem != null && previousStartTime != null) {
       final listenedSeconds = DateTime.now().difference(previousStartTime).inSeconds;
-      final previousSongId = previousItem.extras?['songId'] as String? ?? previousItem.id;
       final previousAlbumId = previousItem.extras?['albumId'] as String? ?? '';
 
-      if (previousSongId.isNotEmpty && listenedSeconds > 0) {
+      if (prevSongId != null && prevSongId.isNotEmpty && listenedSeconds > 0) {
         await onSongPlayed(
-          previousSongId,
+          prevSongId,
           previousItem.title,
           previousItem.artist ?? '',
           previousAlbumId,

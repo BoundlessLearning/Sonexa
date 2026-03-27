@@ -210,7 +210,9 @@ class NowPlayingPage extends ConsumerWidget {
   }
 }
 
-class _SeekBar extends ConsumerWidget {
+/// [Round7-F2] 进度条：拖拽时只更新视觉位置，松手时才执行 seek。
+/// 避免拖拽过程中对 mpv 发起大量 seek 请求（streaming FLAC 会导致 ffmpeg seek failed）。
+class _SeekBar extends ConsumerStatefulWidget {
   const _SeekBar({
     required this.audioHandler,
     required this.mediaItem,
@@ -220,7 +222,17 @@ class _SeekBar extends ConsumerWidget {
   final MediaItem? mediaItem;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SeekBar> createState() => _SeekBarState();
+}
+
+class _SeekBarState extends ConsumerState<_SeekBar> {
+  /// 是否正在拖拽中
+  bool _dragging = false;
+  /// 拖拽时的视觉位置（秒）
+  double _dragValue = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
     final positionAsync = ref.watch(positionProvider);
     final durationAsync = ref.watch(durationProvider);
     final colorScheme = Theme.of(context).colorScheme;
@@ -228,11 +240,13 @@ class _SeekBar extends ConsumerWidget {
 
     final position = positionAsync.valueOrNull ?? Duration.zero;
     final duration =
-        durationAsync.valueOrNull ?? mediaItem?.duration ?? Duration.zero;
+        durationAsync.valueOrNull ?? widget.mediaItem?.duration ?? Duration.zero;
 
     final maxSeconds = duration.inSeconds.toDouble();
-    final currentSeconds =
-        position.inSeconds.toDouble().clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0);
+    // 拖拽中显示拖拽值，否则显示实际播放位置
+    final displaySeconds = _dragging
+        ? _dragValue
+        : position.inSeconds.toDouble().clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0);
 
     return Column(
       children: [
@@ -246,10 +260,27 @@ class _SeekBar extends ConsumerWidget {
             thumbColor: colorScheme.primary,
           ),
           child: Slider(
-            value: currentSeconds,
+            value: displaySeconds,
             max: maxSeconds > 0 ? maxSeconds : 1.0,
+            onChangeStart: (value) {
+              // 开始拖拽：冻结位置更新
+              setState(() {
+                _dragging = true;
+                _dragValue = value;
+              });
+            },
             onChanged: (value) {
-              audioHandler.seek(Duration(seconds: value.toInt()));
+              // 拖拽中：只更新视觉位置，不 seek
+              setState(() {
+                _dragValue = value;
+              });
+            },
+            onChangeEnd: (value) {
+              // 松手：执行实际 seek
+              setState(() {
+                _dragging = false;
+              });
+              widget.audioHandler.seek(Duration(seconds: value.toInt()));
             },
           ),
         ),
@@ -259,7 +290,7 @@ class _SeekBar extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                formatDuration(position.inSeconds),
+                formatDuration(_dragging ? _dragValue.toInt() : position.inSeconds),
                 style: textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
