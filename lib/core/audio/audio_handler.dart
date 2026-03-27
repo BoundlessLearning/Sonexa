@@ -20,6 +20,7 @@ class MusicAudioHandler extends BaseAudioHandler
   final ConcatenatingAudioSource _playlist;
 
   bool _skipInProgress = false;
+  bool _shuffleInProgress = false;
 
   Stream<Duration> get positionStream => _player.positionStream;
   Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
@@ -64,6 +65,8 @@ class MusicAudioHandler extends BaseAudioHandler
     // 使用 sequenceStateStream 代替 currentIndexStream，
     // 以确保在 shuffle 切换等场景下 sequenceState 已完全更新。
     _player.sequenceStateStream.listen((sequenceState) {
+      // shuffle 切换期间跳过事件，避免中间状态污染 UI
+      if (_shuffleInProgress) return;
       if (sequenceState == null || sequenceState.currentSource == null) return;
       final tag = sequenceState.currentSource!.tag;
       if (tag is MediaItem) {
@@ -79,44 +82,47 @@ class MusicAudioHandler extends BaseAudioHandler
     });
   }
 
+  /// 同步 mediaItem 为当前实际播放的曲目。
+  /// 在 shuffle 切换后或 auto-advance 后调用，确保 UI 与播放器状态一致。
+  void _syncCurrentMediaItem() {
+    final index = _player.currentIndex;
+    final items = queue.value;
+    if (index != null && index >= 0 && index < items.length) {
+      final currentItem = items[index];
+      final currentId = mediaItem.valueOrNull?.extras?['songId']
+          ?? mediaItem.valueOrNull?.id;
+      final newId = currentItem.extras?['songId'] ?? currentItem.id;
+      if (newId != currentId) {
+        mediaItem.add(currentItem);
+      }
+    }
+  }
+
   /// 监听播放处理状态，在完成或出错时自动跳到下一首
   void _listenToProcessingState() {
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
-        final hasNext = (_player.currentIndex ?? 0) < queue.value.length - 1;
-        if (hasNext && _player.loopMode == LoopMode.off) {
-          skipToNext();
-        }
+        // just_audio 的 ConcatenatingAudioSource 在 LoopMode.off 时会自动播放下一首，
+        // 在 LoopMode.all 时会自动 wrap。不再手动调用 skipToNext()，
+        // 避免与平台层自动跳转产生竞争条件。
+        // UI 更新由 _listenToCurrentIndex() 的 sequenceStateStream 监听负责。
+        dev.log('ProcessingState.completed — loopMode=${_player.loopMode}, '
+            'index=${_player.currentIndex}/${queue.value.length}');
       }
     });
 
     _player.playerStateStream.listen((state) {
-      // mpv 出错后可能进入 idle 状态（非用户主动 stop）
-      // 如果队列非空且不在跳转中，尝试恢复到当前曲目
       if (state.processingState == ProcessingState.idle &&
           !_skipInProgress &&
           queue.value.isNotEmpty &&
           _player.currentIndex != null &&
           !state.playing) {
-        // 延迟一帧，避免在 dispose 过程中误触发恢复逻辑
         Future.delayed(const Duration(milliseconds: 500), () {
           if (_player.processingState == ProcessingState.idle &&
               queue.value.isNotEmpty &&
               !_skipInProgress) {
-            dev.log('Player stuck in idle state with active queue, '
-                'broadcasting error state for UI recovery');
-            // 发送 error 状态通知 UI，但不自动操作
-            playbackState.add(PlaybackState(
-              controls: [
-                MediaControl.skipToPrevious,
-                MediaControl.play,
-                MediaControl.skipToNext,
-              ],
-              processingState: AudioProcessingState.error,
-              playing: false,
-              updatePosition: _player.position,
-              queueIndex: _player.currentIndex,
-            ));
+            dev.log('Player stuck in idle — attempting recovery');
+            _attemptRecovery();
           }
         });
       }
@@ -279,23 +285,21 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
-  /// 安全跳转到指定索引：暂停状态下使用 setAudioSource 而非 seek，
-  /// 避免 mpv 在暂停态 seek 到新曲目时产生错误。
+  /// 安全跳转到指定索引：使用 seek 切换曲目而非重新加载整个播放列表，
+  /// 避免 mpv 在暂停态执行 stop→reload 产生错误。
   Future<void> _safeSkipToIndex(int index) async {
     final items = queue.value;
     if (index < 0 || index >= items.length) return;
 
-    final wasPlaying = _player.playing;
     try {
       // 先更新 mediaItem，确保 UI 立即响应
       mediaItem.add(items[index]);
-      await _player.setAudioSource(_playlist, initialIndex: index);
-      if (wasPlaying) {
-        await _player.play();
-      }
+      // 使用 seek 切换曲目，避免 setAudioSource 的全量重载
+      await _player.seek(Duration.zero, index: index);
     } catch (e, st) {
-      dev.log('_safeSkipToIndex($index) failed: $e',
+      dev.log('_safeSkipToIndex($index) seek failed: $e',
           error: e, stackTrace: st);
+      // seek 失败时回退到 setAudioSource（可能有新的 playlist 未加载）
       await _forceSkipToIndex(index);
     }
   }
@@ -350,6 +354,41 @@ class MusicAudioHandler extends BaseAudioHandler
     }
   }
 
+  /// 尝试恢复播放器：在音频设备丢失等严重错误后重建播放器。
+  Future<void> _attemptRecovery() async {
+    final currentIdx = _player.currentIndex;
+    final position = _player.position;
+    final wasPlaying = _player.playing;
+
+    dev.log('Attempting player recovery: index=$currentIdx, position=$position');
+
+    try {
+      // 重新设置音频源并恢复位置
+      await _player.setAudioSource(_playlist, initialIndex: currentIdx ?? 0);
+      if (position > Duration.zero) {
+        await _player.seek(position);
+      }
+      if (wasPlaying) {
+        await _player.play();
+      }
+      dev.log('Player recovery succeeded');
+    } catch (e, st) {
+      dev.log('Player recovery failed: $e', error: e, stackTrace: st);
+      // 广播错误状态，让 UI 显示错误
+      playbackState.add(PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        processingState: AudioProcessingState.error,
+        playing: false,
+        updatePosition: position,
+        queueIndex: currentIdx,
+      ));
+    }
+  }
+
   /// 当 seekToNext/seekToPrevious 失败时，重新加载指定索引的音频源
   Future<void> _forceSkipToIndex(int index) async {
     final items = queue.value;
@@ -388,9 +427,16 @@ class MusicAudioHandler extends BaseAudioHandler
   }
 
   Future<void> setShuffle(bool enabled) async {
-    await _player.setShuffleModeEnabled(enabled);
-    if (enabled) {
-      await _player.shuffle();
+    _shuffleInProgress = true;
+    try {
+      await _player.setShuffleModeEnabled(enabled);
+      if (enabled) {
+        await _player.shuffle();
+      }
+    } finally {
+      _shuffleInProgress = false;
+      // shuffle 完成后，确保 mediaItem 反映真正在播放的曲目
+      _syncCurrentMediaItem();
     }
   }
 
