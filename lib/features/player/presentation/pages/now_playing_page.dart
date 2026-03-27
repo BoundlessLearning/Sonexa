@@ -355,7 +355,7 @@ class _PlayModeButton extends ConsumerWidget {
     // 每种模式对应的图标、颜色和提示文字
     final (icon, color, tooltip) = switch (mode) {
       PlayMode.sequential => (
-          Icons.repeat_rounded,
+          Icons.arrow_right_alt_rounded,
           colorScheme.onSurfaceVariant,
           '顺序播放',
         ),
