@@ -10,24 +10,41 @@ import 'package:ohmymusic/features/library/domain/entities/artist.dart';
 import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
 import 'package:ohmymusic/features/library/domain/entities/song.dart';
 
-/// SubsonicApiClient 依赖活跃服务器配置
-/// 当无活跃服务器时抛出 StateError
+/// SubsonicApiClient 依赖活跃服务器配置。
+/// 在 activeServerProvider 处于 AsyncLoading 期间（如登录后 invalidate 重新加载），
+/// 返回上一次成功创建的 client 实例，避免下游 provider 因 StateError 导致加载失败。
 final subsonicApiClientProvider = Provider<SubsonicApiClient>((ref) {
   final serverAsync = ref.watch(activeServerProvider);
-  final server = serverAsync.valueOrNull;
-  if (server == null) {
-    throw StateError('No active server configured');
-  }
 
-  final Dio dio = createDioClient();
-
-  return SubsonicApiClient(
-    dio,
-    baseUrl: server.baseUrl,
-    username: server.username,
-    password: server.password,
+  return serverAsync.when(
+    data: (server) {
+      if (server == null) {
+        throw StateError('No active server configured');
+      }
+      final Dio dio = createDioClient();
+      final client = SubsonicApiClient(
+        dio,
+        baseUrl: server.baseUrl,
+        username: server.username,
+        password: server.password,
+      );
+      // 缓存最近一次成功创建的 client，供 loading 态使用
+      _lastKnownClient = client;
+      return client;
+    },
+    loading: () {
+      // 正在重新加载（如登录/注销后 invalidate），使用上次缓存的 client
+      if (_lastKnownClient != null) return _lastKnownClient!;
+      throw StateError('Server configuration is loading');
+    },
+    error: (e, _) {
+      throw StateError('Failed to load server configuration: $e');
+    },
   );
 });
+
+/// 上一次成功创建的 SubsonicApiClient 缓存
+SubsonicApiClient? _lastKnownClient;
 
 final libraryRepositoryProvider = Provider<LibraryRepository>((ref) {
   return LibraryRepository(ref.read(subsonicApiClientProvider));

@@ -73,12 +73,10 @@ class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
     MusicAudioHandler audioHandler,
     int? index,
   ) async {
-    final currentQueue = audioHandler.queue.valueOrNull ?? const <MediaItem>[];
-    MediaItem? nextItem;
-
-    if (index != null && index >= 0 && index < currentQueue.length) {
-      nextItem = currentQueue[index];
-    }
+    // 使用 audioHandler.mediaItem 获取当前播放的曲目，
+    // 而非 queue[index]，因为在随机播放模式下 currentIndex 对应的是
+    // shuffle 后的逻辑顺序，直接用它作为原始 queue 的下标会取到错误的歌曲。
+    final nextItem = audioHandler.mediaItem.valueOrNull;
 
     final previousItem = _lastPlayedItem;
     final previousStartTime = _lastSongStartTime;
