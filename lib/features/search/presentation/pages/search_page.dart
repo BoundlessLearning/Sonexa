@@ -154,7 +154,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
-        final api = ref.read(subsonicApiClientProvider);
+        final api = ref.read(subsonicApiClientProvider).requireValue;
         return SongListTile(
           song: song,
           coverArtUrl: api.getCoverArtUrl(song.coverArtId),
@@ -186,7 +186,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       itemCount: albums.length,
       itemBuilder: (context, index) {
         final album = albums[index];
-        final api = ref.read(subsonicApiClientProvider);
+        final api = ref.read(subsonicApiClientProvider).requireValue;
         return AlbumGridTile(
           album: album,
           coverArtUrl: api.getCoverArtUrl(album.coverArtId),

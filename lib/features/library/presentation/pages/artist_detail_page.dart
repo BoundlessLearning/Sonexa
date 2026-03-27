@@ -32,7 +32,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
         loading: () => _buildShimmerLoading(context),
         error: (error, stack) => _buildError(context, error),
         data: (artist) {
-          final api = ref.read(subsonicApiClientProvider);
+          final api = ref.read(subsonicApiClientProvider).requireValue;
           // 艺术家封面 URL
           final coverUrl = api.getCoverArtUrl(artist.coverArtId, size: 600);
 
@@ -242,7 +242,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
 
   // ── 播放热门歌曲，从指定位置开始 ──────────────────────────
   void _playTopSongs(List<Song> songs, int index) {
-    final api = ref.read(subsonicApiClientProvider);
+    final api = ref.read(subsonicApiClientProvider).requireValue;
     final audioHandler = ref.read(audioHandlerProvider);
 
     final items = songs.map((song) {

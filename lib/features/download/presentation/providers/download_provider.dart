@@ -15,8 +15,8 @@ final _downloadDirectoryProvider = FutureProvider<String>((ref) async {
   return p.join(documentsDirectory.path, 'downloads');
 });
 
-final downloadManagerProvider = Provider<DownloadManager>((ref) {
-  final apiClient = ref.read(subsonicApiClientProvider);
+final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
+  final apiClient = await ref.watch(subsonicApiClientProvider.future);
   final database = ref.read(databaseProvider);
   final downloadDirectory =
       ref.watch(_downloadDirectoryProvider).valueOrNull ??
@@ -29,8 +29,9 @@ final downloadManagerProvider = Provider<DownloadManager>((ref) {
   return manager;
 });
 
-final downloadListProvider = StreamProvider<List<DownloadTask>>((ref) {
-  return ref.watch(downloadManagerProvider).watchDownloads();
+final downloadListProvider = StreamProvider<List<DownloadTask>>((ref) async* {
+  final manager = await ref.watch(downloadManagerProvider.future);
+  yield* manager.watchDownloads();
 });
 
 final isDownloadedProvider = Provider.family<bool, String>((ref, songId) {

@@ -57,7 +57,7 @@ class PlaylistsTab extends ConsumerWidget {
             );
           }
 
-          final api = ref.read(subsonicApiClientProvider);
+          final api = ref.read(subsonicApiClientProvider).requireValue;
 
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(playlistsProvider),

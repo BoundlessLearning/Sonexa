@@ -178,7 +178,9 @@ class SongContextMenu {
       case _MenuAction.toggleFavorite:
         ref.read(favoritesNotifierProvider.notifier).toggleFavorite(song.id);
       case _MenuAction.download:
-        ref.read(downloadManagerProvider).enqueueDownload(song);
+        final manager = ref.read(downloadManagerProvider).valueOrNull;
+        if (manager == null) return;
+        manager.enqueueDownload(song);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已开始下载: ${song.title}')),
         );
@@ -343,9 +345,8 @@ class _PlaylistPickerDialog extends ConsumerWidget {
 
     try {
       // 创建播放列表（带初始歌曲）
-      await ref
-          .read(subsonicApiClientProvider)
-          .createPlaylist(name: name, songIds: [song.id]);
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.createPlaylist(name: name, songIds: [song.id]);
       ref.invalidate(playlistsProvider);
 
       if (context.mounted) {

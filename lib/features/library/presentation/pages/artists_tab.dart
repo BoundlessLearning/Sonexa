@@ -42,7 +42,7 @@ class ArtistsTab extends ConsumerWidget {
         }
 
         // 获取 API 客户端用于封面 URL
-        final api = ref.read(subsonicApiClientProvider);
+        final api = ref.read(subsonicApiClientProvider).requireValue;
 
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(artistListProvider),

@@ -52,7 +52,8 @@ class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
     );
 
     if (listenDurationSec >= 30) {
-      await ref.read(subsonicApiClientProvider).scrobble(songId);
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.scrobble(songId);
     }
 
     state = AsyncData(await getHistory());

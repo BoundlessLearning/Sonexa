@@ -11,26 +11,26 @@ export 'package:ohmymusic/features/library/presentation/providers/library_provid
 
 // ─── 最新专辑 ──────────────────────────────────────────────
 final newestAlbumsProvider = FutureProvider<List<Album>>((ref) async {
-  return ref
-      .read(libraryRepositoryProvider)
-      .getAlbumList(type: 'newest', size: 10);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getAlbumList(type: 'newest', size: 10);
 });
 
 // ─── 最近播放的专辑 ────────────────────────────────────────
 final recentAlbumsProvider = FutureProvider<List<Album>>((ref) async {
-  return ref
-      .read(libraryRepositoryProvider)
-      .getAlbumList(type: 'recent', size: 10);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getAlbumList(type: 'recent', size: 10);
 });
 
 // ─── 随机推荐歌曲 (首页独立于资料库的 randomSongsProvider) ─
 final homeRandomSongsProvider = FutureProvider<List<Song>>((ref) async {
-  return ref.read(libraryRepositoryProvider).getRandomSongs(size: 20);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getRandomSongs(size: 20);
 });
 
 // ─── 我的收藏歌曲 ───────────────────────────────────────────
 final starredSongsProvider = FutureProvider<List<Song>>((ref) async {
-  final response = await ref.read(subsonicApiClientProvider).getStarred2();
+  final client = await ref.watch(subsonicApiClientProvider.future);
+  final response = await client.getStarred2();
   final body = response.subsonicResponseBody;
   final starred = body?['starred2'] as Map<String, dynamic>?;
   final songs = starred?['song'] as List<dynamic>? ?? [];
@@ -45,9 +45,8 @@ final similarSongsProvider = FutureProvider<List<Song>>((ref) async {
     return [];
   }
 
-  final response = await ref
-      .read(subsonicApiClientProvider)
-      .getSimilarSongs2(currentSong.id, count: 20);
+  final client = await ref.watch(subsonicApiClientProvider.future);
+  final response = await client.getSimilarSongs2(currentSong.id, count: 20);
   final body = response.subsonicResponseBody;
   final similarSongs = body?['similarSongs2'] as Map<String, dynamic>?;
   final songs = similarSongs?['song'] as List<dynamic>? ?? [];

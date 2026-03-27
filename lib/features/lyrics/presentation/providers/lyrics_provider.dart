@@ -9,7 +9,7 @@ import 'package:ohmymusic/features/lyrics/domain/entities/lyrics.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
 
 /// 为歌词仓库创建独立的 lrclib 客户端，避免复用 Subsonic 配置。
-final lyricsRepositoryProvider = Provider<LyricsRepository>((ref) {
+final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
   final dio = Dio(
     BaseOptions(
       baseUrl: 'https://lrclib.net/api',
@@ -19,7 +19,7 @@ final lyricsRepositoryProvider = Provider<LyricsRepository>((ref) {
   ref.onDispose(() => dio.close(force: true));
 
   return LyricsRepository(
-    ref.read(subsonicApiClientProvider),
+    await ref.watch(subsonicApiClientProvider.future),
     dio,
     ref.read(databaseProvider),
   );
@@ -43,8 +43,8 @@ final lyricsProvider = FutureProvider.family<Lyrics?, String>((ref, songId) asyn
 
   // 超过 8 秒未获取到歌词则放弃，UI 会显示"暂无歌词"。
   try {
-    return await ref
-        .read(lyricsRepositoryProvider)
+    final repo = await ref.watch(lyricsRepositoryProvider.future);
+    return await repo
         .getLyrics(songId, artist, title)
         .timeout(const Duration(seconds: 8));
   } on TimeoutException {
@@ -64,8 +64,9 @@ final lyricsSearchProvider =
   final songId = parts[0];
   final artist = parts[1];
   final title = parts.sublist(2).join('|'); // title 中可能包含 |
+  final repo = await ref.watch(lyricsRepositoryProvider.future);
 
-  return ref.read(lyricsRepositoryProvider).searchLrclib(
+  return repo.searchLrclib(
         songId: songId,
         artist: artist,
         title: title,

@@ -68,7 +68,8 @@ Future<void> main() async {
         databaseProvider.overrideWithValue(database),
         audioHandlerProvider.overrideWithValue(audioHandler),
         // 用预加载的服务器配置覆盖 activeServerProvider，
-        // Future.value 在同一微任务队列中同步完成，确保首帧即可获得登录状态
+        // Future.value 通过微任务交付结果，首帧仍为 AsyncLoading；
+        // 下游 FutureProvider 使用 .future 等待加载完成
         activeServerProvider.overrideWith(
           (_) => Future.value(savedServer),
         ),

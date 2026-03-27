@@ -7,6 +7,6 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final searchResultProvider = FutureProvider<SearchResult?>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.trim().isEmpty) return null;
-  final repo = ref.read(libraryRepositoryProvider);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
   return repo.search(query);
 });

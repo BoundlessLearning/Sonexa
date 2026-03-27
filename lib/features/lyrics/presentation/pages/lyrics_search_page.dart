@@ -211,7 +211,8 @@ class _SearchResultList extends ConsumerWidget {
     Lyrics lyrics,
   ) async {
     try {
-      await ref.read(lyricsRepositoryProvider).replaceLyrics(lyrics);
+      final repo = await ref.read(lyricsRepositoryProvider.future);
+      await repo.replaceLyrics(lyrics);
       // 刷新歌词 provider 使当前页面更新
       ref.invalidate(lyricsProvider(songId));
 

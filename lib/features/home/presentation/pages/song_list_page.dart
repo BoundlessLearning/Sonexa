@@ -59,8 +59,9 @@ class SongListPage extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 100),
             itemBuilder: (context, index) {
               final song = songs[index];
-              final api = ref.read(subsonicApiClientProvider);
-              final coverUrl = api.getCoverArtUrl(song.coverArtId, size: 300);
+              final api = ref.read(subsonicApiClientProvider).valueOrNull;
+              final coverUrl =
+                  api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return SongListTile(
                 song: song,
@@ -75,7 +76,8 @@ class SongListPage extends ConsumerWidget {
   }
 
   void _playSongs(WidgetRef ref, List<Song> songs, int index) {
-    final api = ref.read(subsonicApiClientProvider);
+    final api = ref.read(subsonicApiClientProvider).valueOrNull;
+    if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(

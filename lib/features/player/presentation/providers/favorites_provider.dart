@@ -27,7 +27,7 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
     state = nextState;
 
     try {
-      final api = _ref.read(subsonicApiClientProvider);
+      final api = await _ref.read(subsonicApiClientProvider.future);
       if (isCurrentlyFavorite) {
         await api.unstar(songId: songId);
       } else {

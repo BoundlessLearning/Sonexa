@@ -174,8 +174,9 @@ class _RandomSongsSection extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final song = songs[index];
-              final api = ref.read(subsonicApiClientProvider);
-              final coverUrl = api.getCoverArtUrl(song.coverArtId, size: 300);
+              final api = ref.read(subsonicApiClientProvider).valueOrNull;
+              final coverUrl =
+                  api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return _SongCard(
                 song: song,
@@ -190,7 +191,8 @@ class _RandomSongsSection extends StatelessWidget {
   }
 
   void _playSongs(WidgetRef ref, List<Song> songs, int index) {
-    final api = ref.read(subsonicApiClientProvider);
+    final api = ref.read(subsonicApiClientProvider).valueOrNull;
+    if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(
@@ -238,8 +240,9 @@ class _SongSection extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final song = visibleSongs[index];
-              final api = ref.read(subsonicApiClientProvider);
-              final coverUrl = api.getCoverArtUrl(song.coverArtId, size: 300);
+              final api = ref.read(subsonicApiClientProvider).valueOrNull;
+              final coverUrl =
+                  api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return _SongCard(
                 song: song,
@@ -254,7 +257,8 @@ class _SongSection extends StatelessWidget {
   }
 
   void _playSongs(WidgetRef ref, List<Song> songs, int index) {
-    final api = ref.read(subsonicApiClientProvider);
+    final api = ref.read(subsonicApiClientProvider).valueOrNull;
+    if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(
@@ -276,7 +280,7 @@ class _SongCard extends StatelessWidget {
   });
 
   final Song song;
-  final String coverUrl;
+  final String? coverUrl;
   final VoidCallback onTap;
 
   @override
@@ -355,8 +359,8 @@ class _RecentPlaySection extends ConsumerWidget {
             itemBuilder: (context, index) {
               final item = uniqueHistory[index];
               // 使用封面 API — albumId 可用于 coverArt
-              final api = ref.read(subsonicApiClientProvider);
-              final coverUrl = api.getCoverArtUrl(
+              final api = ref.read(subsonicApiClientProvider).valueOrNull;
+              final coverUrl = api?.getCoverArtUrl(
                 item.albumId.isNotEmpty ? item.albumId : item.songId,
                 size: 300,
               );
@@ -365,6 +369,7 @@ class _RecentPlaySection extends ConsumerWidget {
                 artist: item.artist,
                 coverUrl: coverUrl,
                 onTap: () {
+                  if (api == null) return;
                   // 将这首歌作为单曲播放
                   final song = Song(
                     id: item.songId,
@@ -377,7 +382,7 @@ class _RecentPlaySection extends ConsumerWidget {
                   );
                   final mediaItem = song.toMediaItem(
                     api.getStreamUrl(item.songId),
-                    coverUrl,
+                    coverUrl ?? '',
                   );
                   ref.read(audioHandlerProvider).loadAndPlay([mediaItem]);
                 },
@@ -400,7 +405,7 @@ class _RecentPlayCard extends StatelessWidget {
 
   final String title;
   final String artist;
-  final String coverUrl;
+  final String? coverUrl;
   final VoidCallback onTap;
 
   @override
@@ -473,8 +478,9 @@ class _AlbumSection extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final album = albums[index];
-              final api = ref.read(subsonicApiClientProvider);
-              final coverUrl = api.getCoverArtUrl(album.coverArtId, size: 300);
+              final api = ref.read(subsonicApiClientProvider).valueOrNull;
+              final coverUrl =
+                  api?.getCoverArtUrl(album.coverArtId, size: 300);
 
               return _AlbumCard(
                 album: album,
@@ -499,7 +505,7 @@ class _AlbumCard extends StatelessWidget {
   });
 
   final Album album;
-  final String coverUrl;
+  final String? coverUrl;
   final VoidCallback onTap;
 
   @override

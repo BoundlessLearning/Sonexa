@@ -34,7 +34,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
         loading: () => _buildShimmerLoading(context),
         error: (error, stack) => _buildError(context, error),
         data: (album) {
-          final api = ref.read(subsonicApiClientProvider);
+          final api = ref.read(subsonicApiClientProvider).requireValue;
           // 专辑封面 URL（高分辨率）
           final coverUrl = api.getCoverArtUrl(album.coverArtId, size: 600);
 
@@ -192,7 +192,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
 
   // ── 从指定位置开始播放 ────────────────────────────────────
   void _playFromIndex(List<Song> songs, int index) {
-    final api = ref.read(subsonicApiClientProvider);
+    final api = ref.read(subsonicApiClientProvider).requireValue;
     final audioHandler = ref.read(audioHandlerProvider);
 
     final items = songs.map((song) {

@@ -10,58 +10,39 @@ import 'package:ohmymusic/features/library/domain/entities/artist.dart';
 import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
 import 'package:ohmymusic/features/library/domain/entities/song.dart';
 
-/// SubsonicApiClient 依赖活跃服务器配置。
-/// 在 activeServerProvider 处于 AsyncLoading 期间（如登录后 invalidate 重新加载），
-/// 返回上一次成功创建的 client 实例，避免下游 provider 因 StateError 导致加载失败。
-final subsonicApiClientProvider = Provider<SubsonicApiClient>((ref) {
-  final serverAsync = ref.watch(activeServerProvider);
-
-  return serverAsync.when(
-    data: (server) {
-      if (server == null) {
-        throw StateError('No active server configured');
-      }
-      final Dio dio = createDioClient();
-      final client = SubsonicApiClient(
-        dio,
-        baseUrl: server.baseUrl,
-        username: server.username,
-        password: server.password,
-      );
-      // 缓存最近一次成功创建的 client，供 loading 态使用
-      _lastKnownClient = client;
-      return client;
-    },
-    loading: () {
-      // 正在重新加载（如登录/注销后 invalidate），使用上次缓存的 client
-      if (_lastKnownClient != null) return _lastKnownClient!;
-      throw StateError('Server configuration is loading');
-    },
-    error: (e, _) {
-      throw StateError('Failed to load server configuration: $e');
-    },
+/// SubsonicApiClient 依赖活跃服务器配置，等待其加载完成后创建。
+final subsonicApiClientProvider = FutureProvider<SubsonicApiClient>((ref) async {
+  final server = await ref.watch(activeServerProvider.future);
+  if (server == null) {
+    throw StateError('No active server configured');
+  }
+  final Dio dio = createDioClient();
+  return SubsonicApiClient(
+    dio,
+    baseUrl: server.baseUrl,
+    username: server.username,
+    password: server.password,
   );
 });
 
-/// 上一次成功创建的 SubsonicApiClient 缓存
-SubsonicApiClient? _lastKnownClient;
-
-final libraryRepositoryProvider = Provider<LibraryRepository>((ref) {
-  return LibraryRepository(ref.read(subsonicApiClientProvider));
+final libraryRepositoryProvider = FutureProvider<LibraryRepository>((ref) async {
+  final client = await ref.watch(subsonicApiClientProvider.future);
+  return LibraryRepository(client);
 });
 
 final albumListProvider = FutureProvider<List<Album>>((ref) async {
-  return ref
-      .read(libraryRepositoryProvider)
-      .getAlbumList(type: 'newest', size: 50);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getAlbumList(type: 'newest', size: 50);
 });
 
 final artistListProvider = FutureProvider<List<Artist>>((ref) async {
-  return ref.read(libraryRepositoryProvider).getArtists();
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getArtists();
 });
 
 final randomSongsProvider = FutureProvider<List<Song>>((ref) async {
-  return ref.read(libraryRepositoryProvider).getRandomSongs(size: 50);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getRandomSongs(size: 50);
 });
 
 /// 分页加载专辑列表的状态管理
@@ -84,7 +65,7 @@ class PaginatedAlbumsNotifier extends StateNotifier<AsyncValue<List<Album>>> {
     _isLoading = true;
 
     try {
-      final repo = _ref.read(libraryRepositoryProvider);
+      final repo = await _ref.read(libraryRepositoryProvider.future);
       final newAlbums = await repo.getAlbumList(
         type: 'alphabeticalByName',
         size: _pageSize,
@@ -139,7 +120,7 @@ class PaginatedSongsNotifier extends StateNotifier<AsyncValue<List<Song>>> {
     _isLoading = true;
 
     try {
-      final api = _ref.read(subsonicApiClientProvider);
+      final api = await _ref.read(subsonicApiClientProvider.future);
       final response = await api.search3(
         query: '',
         songCount: _pageSize,
@@ -218,19 +199,21 @@ Song _parsePaginatedSong(Map<String, dynamic> json) => Song(
 
 final albumDetailProvider =
     FutureProvider.family<Album, String>((ref, id) async {
-  return ref.read(libraryRepositoryProvider).getAlbumDetail(id);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getAlbumDetail(id);
 });
 
 final albumSongsProvider =
     FutureProvider.family<List<Song>, String>((ref, albumId) async {
-  return ref.read(libraryRepositoryProvider).getAlbumSongs(albumId);
+  final repo = await ref.watch(libraryRepositoryProvider.future);
+  return repo.getAlbumSongs(albumId);
 });
 
 // ─── 艺术家详情 ─────────────────────────────────────────────
 
 final artistDetailProvider =
     FutureProvider.family<Artist, String>((ref, id) async {
-  final api = ref.read(subsonicApiClientProvider);
+  final api = await ref.watch(subsonicApiClientProvider.future);
   final response = await api.getArtist(id);
   final body = response.subsonicResponseBody;
   final artistData = body?['artist'] as Map<String, dynamic>?;
@@ -246,7 +229,7 @@ final artistDetailProvider =
 
 final artistAlbumsProvider =
     FutureProvider.family<List<Album>, String>((ref, artistId) async {
-  final api = ref.read(subsonicApiClientProvider);
+  final api = await ref.watch(subsonicApiClientProvider.future);
   final response = await api.getArtist(artistId);
   final body = response.subsonicResponseBody;
   final artistData = body?['artist'] as Map<String, dynamic>?;
@@ -272,7 +255,7 @@ final artistAlbumsProvider =
 
 final playlistDetailProvider =
     FutureProvider.family<Playlist, String>((ref, id) async {
-  final api = ref.read(subsonicApiClientProvider);
+  final api = await ref.watch(subsonicApiClientProvider.future);
   final response = await api.getPlaylist(id);
   final body = response.subsonicResponseBody;
   final playlistData = body?['playlist'] as Map<String, dynamic>?;
@@ -315,7 +298,7 @@ final playlistDetailProvider =
 
 final artistTopSongsProvider =
     FutureProvider.family<List<Song>, String>((ref, artistName) async {
-  final api = ref.read(subsonicApiClientProvider);
+  final api = await ref.watch(subsonicApiClientProvider.future);
   final response = await api.getTopSongs(artistName, count: 10);
   final body = response.subsonicResponseBody;
   final topSongs = body?['topSongs'];

@@ -4,7 +4,8 @@ import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
 import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
 
 final playlistsProvider = FutureProvider<List<Playlist>>((ref) async {
-  final response = await ref.read(subsonicApiClientProvider).getPlaylists();
+  final api = await ref.watch(subsonicApiClientProvider.future);
+  final response = await api.getPlaylists();
   final body = response.subsonicResponseBody;
   final playlists = body?['playlists'] as Map<String, dynamic>?;
   final items = playlists?['playlist'] as List<dynamic>? ?? [];
@@ -21,7 +22,8 @@ class PlaylistCrudNotifier extends AsyncNotifier<void> {
   Future<void> createPlaylist(String name) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(subsonicApiClientProvider).createPlaylist(name: name);
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.createPlaylist(name: name);
       _invalidateAll();
     });
   }
@@ -29,7 +31,8 @@ class PlaylistCrudNotifier extends AsyncNotifier<void> {
   Future<void> renamePlaylist(String playlistId, String name) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(subsonicApiClientProvider).updatePlaylist(
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.updatePlaylist(
             playlistId: playlistId,
             name: name,
           );
@@ -40,7 +43,8 @@ class PlaylistCrudNotifier extends AsyncNotifier<void> {
   Future<void> deletePlaylist(String id) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(subsonicApiClientProvider).deletePlaylist(id);
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.deletePlaylist(id);
       _invalidateAll();
     });
   }
@@ -48,7 +52,8 @@ class PlaylistCrudNotifier extends AsyncNotifier<void> {
   Future<void> addSongToPlaylist(String playlistId, String songId) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(subsonicApiClientProvider).updatePlaylist(
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.updatePlaylist(
             playlistId: playlistId,
             songIdsToAdd: [songId],
           );
@@ -59,7 +64,8 @@ class PlaylistCrudNotifier extends AsyncNotifier<void> {
   Future<void> removeSongFromPlaylist(String playlistId, int songIndex) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(subsonicApiClientProvider).updatePlaylist(
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.updatePlaylist(
             playlistId: playlistId,
             songIndexesToRemove: [songIndex],
           );

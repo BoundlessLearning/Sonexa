@@ -106,7 +106,7 @@ class _AlbumsTabState extends ConsumerState<AlbumsTab> {
           );
         }
 
-        final api = ref.read(subsonicApiClientProvider);
+        final api = ref.read(subsonicApiClientProvider).requireValue;
         final hasMore = ref.read(paginatedAlbumsProvider.notifier).hasMore;
 
         return RefreshIndicator(

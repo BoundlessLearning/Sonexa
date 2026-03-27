@@ -58,7 +58,7 @@ class DownloadsPage extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
-              ref.read(downloadManagerProvider).deleteAll();
+              ref.read(downloadManagerProvider).valueOrNull?.deleteAll();
               Navigator.of(ctx).pop();
             },
             child: const Text('确定'),
@@ -185,7 +185,7 @@ class _DownloadListView extends ConsumerWidget {
                 child: const Icon(Icons.delete_rounded, color: Colors.white),
               ),
               onDismissed: (_) {
-                ref.read(downloadManagerProvider).delete(task.id);
+                ref.read(downloadManagerProvider).valueOrNull?.delete(task.id);
               },
               child: _DownloadTaskTile(task: task),
             ),
@@ -324,25 +324,29 @@ class _DownloadTaskTile extends ConsumerWidget {
         return IconButton(
           icon: Icon(Icons.close_rounded, color: colorScheme.onSurfaceVariant),
           tooltip: '取消',
-          onPressed: () => ref.read(downloadManagerProvider).cancel(task.id),
+          onPressed: () =>
+              ref.read(downloadManagerProvider).valueOrNull?.cancel(task.id),
         );
       case DownloadStatus.completed:
         return IconButton(
           icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
           tooltip: '删除',
-          onPressed: () => ref.read(downloadManagerProvider).delete(task.id),
+          onPressed: () =>
+              ref.read(downloadManagerProvider).valueOrNull?.delete(task.id),
         );
       case DownloadStatus.failed:
         return IconButton(
           icon: Icon(Icons.refresh_rounded, color: colorScheme.primary),
           tooltip: '重试',
-          onPressed: () => ref.read(downloadManagerProvider).retry(task.id),
+          onPressed: () =>
+              ref.read(downloadManagerProvider).valueOrNull?.retry(task.id),
         );
       case DownloadStatus.paused:
         return IconButton(
           icon: Icon(Icons.play_arrow_rounded, color: colorScheme.primary),
           tooltip: '继续',
-          onPressed: () => ref.read(downloadManagerProvider).resume(task.id),
+          onPressed: () =>
+              ref.read(downloadManagerProvider).valueOrNull?.resume(task.id),
         );
     }
   }
