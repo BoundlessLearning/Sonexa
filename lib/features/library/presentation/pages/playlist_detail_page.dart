@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:ohmymusic/core/audio/media_item_converter.dart';
+import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/formatters.dart';
 import 'package:ohmymusic/core/widgets/app_image.dart';
 import 'package:ohmymusic/features/library/domain/entities/song.dart';
@@ -184,6 +185,9 @@ class PlaylistDetailPage extends ConsumerWidget {
   void _playFromIndex(WidgetRef ref, List<Song> songs, int index) {
     final api = ref.read(subsonicApiClientProvider).requireValue;
     final audioHandler = ref.read(audioHandlerProvider);
+    DiagnosticLogger.instance.log(
+      '[OP] playlist_detail_play: startIndex=$index, totalSongs=${songs.length}',
+    );
 
     final items = songs.map((song) {
       final streamUrl = api.getStreamUrl(song.id);

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:ohmymusic/core/audio/audio_handler.dart' as ah;
 import 'package:ohmymusic/core/utils/formatters.dart';
+import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/features/lyrics/presentation/providers/lyrics_provider.dart';
 import 'package:ohmymusic/features/lyrics/presentation/widgets/lyrics_display.dart';
 import 'package:ohmymusic/features/player/presentation/providers/favorites_provider.dart';
@@ -281,6 +282,8 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
               setState(() {
                 _dragging = false;
               });
+              DiagnosticLogger.instance
+                  .log('[OP] seek_bar_change_end: seconds=${value.toInt()}');
               widget.audioHandler.seek(Duration(seconds: value.toInt()));
             },
           ),
@@ -335,12 +338,17 @@ class _PlaybackControls extends StatelessWidget {
               icon: const Icon(Icons.skip_previous_rounded),
               iconSize: 36,
               color: colorScheme.onSurface,
-              onPressed: audioHandler.skipToPrevious,
+              onPressed: () {
+                DiagnosticLogger.instance.log('[OP] previous_button_tap');
+                audioHandler.skipToPrevious();
+              },
             ),
             const SizedBox(width: 12),
             // Play/Pause FAB — 带缩放/淡入切换动画
             FloatingActionButton(
               onPressed: () {
+                final action = playing ? 'pause_button_tap' : 'play_button_tap';
+                DiagnosticLogger.instance.log('[OP] $action');
                 if (playing) {
                   audioHandler.pause();
                 } else {
@@ -374,7 +382,10 @@ class _PlaybackControls extends StatelessWidget {
               icon: const Icon(Icons.skip_next_rounded),
               iconSize: 36,
               color: colorScheme.onSurface,
-              onPressed: audioHandler.skipToNext,
+              onPressed: () {
+                DiagnosticLogger.instance.log('[OP] next_button_tap');
+                audioHandler.skipToNext();
+              },
             ),
             const SizedBox(width: 16),
           ],
@@ -432,6 +443,7 @@ class _PlayModeButton extends ConsumerWidget {
           PlayMode.repeatOne => PlayMode.repeatAll,
           PlayMode.repeatAll => PlayMode.sequential,
         };
+        DiagnosticLogger.instance.log('[OP] play_mode_switch: $mode -> $nextMode');
         debugPrint('[DIAG] PlayMode switch: $mode → $nextMode');
         ref.read(playModeProvider.notifier).state = nextMode;
 

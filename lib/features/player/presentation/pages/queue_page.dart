@@ -2,6 +2,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/formatters.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
 
@@ -60,7 +61,11 @@ class QueuePage extends ConsumerWidget {
                     newIndex -= 1;
                   }
 
-                  audioHandler.moveQueueItem(oldIndex, newIndex);
+                   DiagnosticLogger.instance.log(
+                     '[OP] queue_reorder: oldIndex=$oldIndex, newIndex=$newIndex',
+                   );
+
+                   audioHandler.moveQueueItem(oldIndex, newIndex);
                 },
                 itemBuilder: (context, index) {
                   final item = queue[index];
@@ -80,11 +85,17 @@ class QueuePage extends ConsumerWidget {
                       ),
                     ),
                     onDismissed: (_) {
+                      DiagnosticLogger.instance.log(
+                        '[OP] queue_remove: index=$index, title=${item.title}',
+                      );
                       audioHandler.removeFromQueue(index);
                     },
                     child: ListTile(
                       key: ValueKey('tile_${item.id}_$index'),
                       onTap: () {
+                        DiagnosticLogger.instance.log(
+                          '[OP] queue_tap: index=$index, title=${item.title}',
+                        );
                         audioHandler.skipToQueueItem(index);
                       },
                       leading: isCurrent
