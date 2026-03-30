@@ -1,6 +1,5 @@
-import 'dart:developer' as dev;
-
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -433,7 +432,7 @@ class _PlayModeButton extends ConsumerWidget {
           PlayMode.repeatOne => PlayMode.repeatAll,
           PlayMode.repeatAll => PlayMode.sequential,
         };
-        dev.log('[DIAG] PlayMode switch: $mode → $nextMode');
+        debugPrint('[DIAG] PlayMode switch: $mode → $nextMode');
         ref.read(playModeProvider.notifier).state = nextMode;
 
         // [Round8-F1] 将播放模式同步到音频处理器。
@@ -442,23 +441,23 @@ class _PlayModeButton extends ConsumerWidget {
         // 避免并发导致进度条短暂归零闪烁。
         switch (nextMode) {
           case PlayMode.sequential:
-            dev.log('[DIAG] PlayMode.sequential: setShuffle(false) then setRepeatMode(none)');
+            debugPrint('[DIAG] PlayMode.sequential: setShuffle(false) then setRepeatMode(none)');
             await audioHandler.setShuffle(false);
             await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
           case PlayMode.shuffle:
-            dev.log('[DIAG] PlayMode.shuffle: setRepeatMode(none) then setShuffle(true)');
+            debugPrint('[DIAG] PlayMode.shuffle: setRepeatMode(none) then setShuffle(true)');
             await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
             await audioHandler.setShuffle(true);
           case PlayMode.repeatOne:
-            dev.log('[DIAG] PlayMode.repeatOne: setShuffle(false) then setRepeatMode(one)');
+            debugPrint('[DIAG] PlayMode.repeatOne: setShuffle(false) then setRepeatMode(one)');
             await audioHandler.setShuffle(false);
             await audioHandler.setRepeatMode(AudioServiceRepeatMode.one);
           case PlayMode.repeatAll:
-            dev.log('[DIAG] PlayMode.repeatAll: setShuffle(false) then setRepeatMode(all)');
+            debugPrint('[DIAG] PlayMode.repeatAll: setShuffle(false) then setRepeatMode(all)');
             await audioHandler.setShuffle(false);
             await audioHandler.setRepeatMode(AudioServiceRepeatMode.all);
         }
-        dev.log('[DIAG] PlayMode switch DONE: $nextMode');
+        debugPrint('[DIAG] PlayMode switch DONE: $nextMode');
       },
     );
   }

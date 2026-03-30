@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:developer' as dev;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 export 'package:audio_service/audio_service.dart' show AudioServiceRepeatMode;
@@ -52,6 +52,19 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 当前是否处于手动 shuffle 模式
   bool get shuffleEnabled => _shuffleEnabled;
 
+  /// 终端可见的诊断日志。
+  /// Linux 桌面环境下 `dart:developer.log` 默认不输出到 stdout，
+  /// 因此统一使用 debugPrint 作为调试主通道。
+  void _diag(String message, {Object? error, StackTrace? stackTrace}) {
+    debugPrint(message);
+    if (error != null) {
+      debugPrint('[DIAG] error=$error');
+    }
+    if (stackTrace != null) {
+      debugPrintStack(label: '[DIAG] stackTrace', stackTrace: stackTrace);
+    }
+  }
+
   Future<void> _init() async {
     final session = await AudioSession.instance;
     await session.configure(AudioSessionConfiguration.music());
@@ -69,7 +82,7 @@ class MusicAudioHandler extends BaseAudioHandler
         playbackState.add(_transformEvent(event));
       },
       onError: (Object error, StackTrace st) {
-        dev.log('[DIAG] playbackEvent ERROR: $error',
+        _diag('[DIAG] playbackEvent ERROR: $error',
             error: error, stackTrace: st);
         // 发送一个安全的错误状态，而非让 sink 关闭
         playbackState.add(PlaybackState(
@@ -88,7 +101,7 @@ class MusicAudioHandler extends BaseAudioHandler
 
     // [DIAG] 直接监听 currentIndexStream，观察 just_audio 原始 index 变化
     _player.currentIndexStream.listen((rawIndex) {
-      dev.log('[DIAG] currentIndexStream RAW: rawIndex=$rawIndex, '
+      _diag('[DIAG] currentIndexStream RAW: rawIndex=$rawIndex, '
           '_currentIndex=$_currentIndex, '
           'playing=${_player.playing}, '
           'processingState=${_player.processingState}');
@@ -103,11 +116,11 @@ class MusicAudioHandler extends BaseAudioHandler
   void _listenToCurrentIndex() {
     _player.sequenceStateStream.listen((sequenceState) {
       if (sequenceState == null) {
-        dev.log('[DIAG] sequenceState: null');
+        _diag('[DIAG] sequenceState: null');
         return;
       }
       if (sequenceState.currentSource == null) {
-        dev.log('[DIAG] sequenceState: currentSource=null, '
+        _diag('[DIAG] sequenceState: currentSource=null, '
             'index=${sequenceState.currentIndex}');
         return;
       }
@@ -124,7 +137,7 @@ class MusicAudioHandler extends BaseAudioHandler
         // sequenceStateStream 在 seek(index:), auto-advance, seekToNext() 等
         // 场景都会触发，确保 UI 总是反映当前实际播放的曲目。
         mediaItem.add(tag);
-        dev.log('[DIAG] sequenceState FIRED: '
+        _diag('[DIAG] sequenceState FIRED: '
             'prevIdx=$prevIdx→newIdx=$idx, '
             'prevTitle="$prevTitle"→newTitle="${tag.title}", '
             'songId=${tag.extras?['songId']}, '
@@ -132,7 +145,7 @@ class MusicAudioHandler extends BaseAudioHandler
             'playerPosition=${_player.position}, '
             '_player.currentIndex=${_player.currentIndex}');
       } else {
-        dev.log('[DIAG] sequenceState: tag is NOT MediaItem, '
+        _diag('[DIAG] sequenceState: tag is NOT MediaItem, '
             'tag.runtimeType=${tag.runtimeType}, idx=$idx');
       }
     });
@@ -141,7 +154,7 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 监听播放处理状态，在完成或出错时自动跳到下一首
   void _listenToProcessingState() {
     _player.processingStateStream.listen((state) {
-      dev.log('[DIAG] processingState: $state, '
+      _diag('[DIAG] processingState: $state, '
           'index=${_player.currentIndex}, _currentIndex=$_currentIndex, '
           'playing=${_player.playing}, '
           'loopMode=${_player.loopMode}, '
@@ -152,14 +165,14 @@ class MusicAudioHandler extends BaseAudioHandler
         // ConcatenatingAudioSource 在 LoopMode.off 时会自动播放下一首，
         // 在 LoopMode.all 时会自动 wrap。不再手动调用 skipToNext()。
         // UI 更新由 _listenToCurrentIndex() 的 sequenceStateStream 负责。
-        dev.log('[DIAG] ★ COMPLETED — loopMode=${_player.loopMode}, '
+        _diag('[DIAG] ★ COMPLETED — loopMode=${_player.loopMode}, '
             'index=${_player.currentIndex}/${queue.value.length}, '
             '_currentIndex=$_currentIndex');
       }
     });
 
     _player.playerStateStream.listen((state) {
-      dev.log('[DIAG] playerState: processing=${state.processingState}, '
+      _diag('[DIAG] playerState: processing=${state.processingState}, '
           'playing=${state.playing}, '
           '_skipInProgress=$_skipInProgress, '
           'queueLen=${queue.value.length}, '
@@ -168,17 +181,17 @@ class MusicAudioHandler extends BaseAudioHandler
           !_skipInProgress &&
           queue.value.isNotEmpty &&
           !state.playing) {
-        dev.log('[DIAG] ⚠ Player IDLE with non-empty queue — '
+        _diag('[DIAG] ⚠ Player IDLE with non-empty queue — '
             'scheduling recovery in 500ms');
         Future.delayed(const Duration(milliseconds: 500), () {
           if (_player.processingState == ProcessingState.idle &&
               queue.value.isNotEmpty &&
               !_skipInProgress) {
-            dev.log('[DIAG] ⚠ Player still IDLE after 500ms — '
+            _diag('[DIAG] ⚠ Player still IDLE after 500ms — '
                 'triggering _attemptRecovery');
             _attemptRecovery();
           } else {
-            dev.log('[DIAG] Recovery cancelled: '
+            _diag('[DIAG] Recovery cancelled: '
                 'processingState=${_player.processingState}, '
                 'queueEmpty=${queue.value.isEmpty}, '
                 '_skipInProgress=$_skipInProgress');
@@ -224,10 +237,10 @@ class MusicAudioHandler extends BaseAudioHandler
       if (currentBuffered == _lastBufferedPosition &&
           currentBuffered.inMilliseconds > 0) {
         _staleBufferCount++;
-        dev.log('Health check: stale buffer count=$_staleBufferCount, '
+        _diag('[DIAG] Health check: stale buffer count=$_staleBufferCount, '
             'buffered=$currentBuffered, position=$currentPosition');
         if (_staleBufferCount >= _maxStaleBufferChecks) {
-          dev.log('Health check: buffered position stale for '
+          _diag('[DIAG] Health check: buffered position stale for '
               '${_staleBufferCount * 5}s while playing — triggering recovery');
           _staleBufferCount = 0;
           _attemptRecovery();
@@ -273,11 +286,66 @@ class MusicAudioHandler extends BaseAudioHandler
     return AudioSource.uri(uri, tag: item);
   }
 
+  String _songIdOf(MediaItem item) =>
+      item.extras?['songId'] as String? ?? item.id;
+
+  /// 非破坏式重排当前队列，尽量避免 `setAudioSource()` 带来的位置归零与 stop 噪音。
+  Future<void> _reorderQueuePreservingPlayback(
+    List<MediaItem> targetItems, {
+    required int currentIndexAfterReorder,
+    required Duration position,
+  }) async {
+    final workingQueue = List<MediaItem>.from(queue.value);
+
+    if (workingQueue.length != targetItems.length) {
+      _diag('[DIAG] _reorderQueuePreservingPlayback: length mismatch, '
+          'fallback to _rebuildAudioSource');
+      await _rebuildAudioSource(targetItems, currentIndexAfterReorder, position);
+      return;
+    }
+
+    for (var targetIndex = 0; targetIndex < targetItems.length; targetIndex++) {
+      final targetSongId = _songIdOf(targetItems[targetIndex]);
+      final sourceIndex = workingQueue.indexWhere(
+        (item) => _songIdOf(item) == targetSongId,
+      );
+
+      if (sourceIndex < 0) {
+        _diag('[DIAG] _reorderQueuePreservingPlayback: target song missing, '
+            'fallback to _rebuildAudioSource');
+        await _rebuildAudioSource(targetItems, currentIndexAfterReorder, position);
+        return;
+      }
+
+      if (sourceIndex == targetIndex) {
+        continue;
+      }
+
+      final movedItem = workingQueue.removeAt(sourceIndex);
+      workingQueue.insert(targetIndex, movedItem);
+      await _playlist.move(sourceIndex, targetIndex);
+    }
+
+    queue.add(List<MediaItem>.from(targetItems));
+    _currentIndex = currentIndexAfterReorder;
+    if (currentIndexAfterReorder >= 0 &&
+        currentIndexAfterReorder < targetItems.length) {
+      mediaItem.add(targetItems[currentIndexAfterReorder]);
+    }
+
+    if (position > Duration.zero) {
+      await _player.seek(position, index: currentIndexAfterReorder);
+    }
+
+    _diag('[DIAG] _reorderQueuePreservingPlayback DONE: '
+        'newIndex=$currentIndexAfterReorder, position=$position');
+  }
+
   Future<void> loadAndPlay(
     List<MediaItem> items, {
     int initialIndex = 0,
   }) async {
-    dev.log('[DIAG] loadAndPlay: ${items.length} items, '
+    _diag('[DIAG] loadAndPlay: ${items.length} items, '
         'initialIndex=$initialIndex, '
         'shuffleEnabled=$_shuffleEnabled');
     // 新队列加载时重置 shuffle 状态
@@ -314,11 +382,11 @@ class MusicAudioHandler extends BaseAudioHandler
         await play();
       }
     } catch (e, st) {
-      dev.log('loadAndPlay failed at index $initialIndex: $e',
+      _diag('[DIAG] loadAndPlay FAILED at index $initialIndex: $e',
           error: e, stackTrace: st);
       // 如果首选曲目加载失败，尝试下一首
       if (initialIndex < items.length - 1) {
-        dev.log('Trying next track at index ${initialIndex + 1}');
+        _diag('[DIAG] Trying next track at index ${initialIndex + 1}');
         try {
           await _player.setAudioSource(_playlist,
               initialIndex: initialIndex + 1);
@@ -328,7 +396,7 @@ class MusicAudioHandler extends BaseAudioHandler
           }
           await _player.play();
         } catch (retryError, retrySt) {
-          dev.log('Retry also failed: $retryError',
+          _diag('[DIAG] Retry also failed: $retryError',
               error: retryError, stackTrace: retrySt);
         }
       }
@@ -337,16 +405,25 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> play() async {
-    dev.log('[DIAG] play() called: '
+    _diag('[DIAG] play() called: '
         'processingState=${_player.processingState}, '
         'playing=${_player.playing}, '
         '_currentIndex=$_currentIndex, '
         'position=${_player.position}');
+
+    if (_player.processingState == ProcessingState.idle &&
+        queue.value.isNotEmpty) {
+      _diag('[DIAG] play(): player is idle with non-empty queue, '
+          'retry current track before normal play');
+      await _retryCurrentTrack();
+      return;
+    }
+
     try {
       await _player.play();
-      dev.log('[DIAG] play() succeeded');
+      _diag('[DIAG] play() succeeded');
     } catch (e, st) {
-      dev.log('[DIAG] play() FAILED: $e', error: e, stackTrace: st);
+      _diag('[DIAG] play() FAILED: $e', error: e, stackTrace: st);
       // 暂停后继续播放失败时，尝试重新加载当前曲目
       await _retryCurrentTrack();
     }
@@ -354,26 +431,26 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> pause() async {
-    dev.log('[DIAG] pause() called: '
+    _diag('[DIAG] pause() called: '
         'playing=${_player.playing}, '
         '_currentIndex=$_currentIndex, '
         'position=${_player.position}');
     try {
       await _player.pause();
     } catch (e, st) {
-      dev.log('[DIAG] pause() FAILED: $e', error: e, stackTrace: st);
+      _diag('[DIAG] pause() FAILED: $e', error: e, stackTrace: st);
     }
   }
 
   @override
   Future<void> seek(Duration position) async {
-    dev.log('[DIAG] seek($position) called: '
+    _diag('[DIAG] seek($position) called: '
         '_currentIndex=$_currentIndex, '
         'playing=${_player.playing}');
     try {
       await _player.seek(position);
     } catch (e, st) {
-      dev.log('[DIAG] seek() FAILED: $e', error: e, stackTrace: st);
+      _diag('[DIAG] seek() FAILED: $e', error: e, stackTrace: st);
     }
   }
 
@@ -383,7 +460,7 @@ class MusicAudioHandler extends BaseAudioHandler
   @override
   Future<void> skipToNext() async {
     if (_skipInProgress) {
-      dev.log('[DIAG] skipToNext: BLOCKED — _skipInProgress=true');
+      _diag('[DIAG] skipToNext: BLOCKED — _skipInProgress=true');
       return;
     }
     _skipInProgress = true;
@@ -391,7 +468,7 @@ class MusicAudioHandler extends BaseAudioHandler
       final currentIdx = _currentIndex;
       final playerIdx = _player.currentIndex;
       final total = queue.value.length;
-      dev.log('[DIAG] skipToNext ENTER: '
+      _diag('[DIAG] skipToNext ENTER: '
           '_currentIndex=$currentIdx, '
           '_player.currentIndex=$playerIdx, '
           'total=$total, '
@@ -408,19 +485,22 @@ class MusicAudioHandler extends BaseAudioHandler
         // 列表循环模式下，末尾回到第一首
         nextIdx = 0;
       } else {
-        dev.log('[DIAG] skipToNext: no next track available');
+        _diag('[DIAG] skipToNext: no next track available');
         return;
       }
 
-      dev.log('[DIAG] skipToNext: seeking to index $nextIdx');
+      _diag('[DIAG] skipToNext: seeking to index $nextIdx');
       await _player.seek(Duration.zero, index: nextIdx);
       // 立即更新自维护的 _currentIndex，不等 sequenceStateStream 异步回调
       _currentIndex = nextIdx;
-      dev.log('[DIAG] skipToNext DONE: $currentIdx → $nextIdx, '
+      if (nextIdx >= 0 && nextIdx < queue.value.length) {
+        mediaItem.add(queue.value[nextIdx]);
+      }
+      _diag('[DIAG] skipToNext DONE: $currentIdx → $nextIdx, '
           '_player.currentIndex=${_player.currentIndex}');
       // mediaItem 更新由 _listenToCurrentIndex() 的 sequenceStateStream 驱动
     } catch (e, st) {
-      dev.log('[DIAG] skipToNext FAILED: $e', error: e, stackTrace: st);
+      _diag('[DIAG] skipToNext FAILED: $e', error: e, stackTrace: st);
       // 回退：用 setAudioSource 强制跳转
       final nextIdx = _currentIndex + 1;
       if (nextIdx < queue.value.length) {
@@ -436,21 +516,21 @@ class MusicAudioHandler extends BaseAudioHandler
   @override
   Future<void> skipToPrevious() async {
     if (_skipInProgress) {
-      dev.log('[DIAG] skipToPrevious: BLOCKED — _skipInProgress=true');
+      _diag('[DIAG] skipToPrevious: BLOCKED — _skipInProgress=true');
       return;
     }
     _skipInProgress = true;
     try {
       final currentIdx = _currentIndex;
       final playerIdx = _player.currentIndex;
-      dev.log('[DIAG] skipToPrevious ENTER: '
+      _diag('[DIAG] skipToPrevious ENTER: '
           '_currentIndex=$currentIdx, '
           '_player.currentIndex=$playerIdx, '
           'position=${_player.position}');
 
       // 如果当前播放超过 3 秒，回到曲目开头
       if (_player.position.inSeconds > 3) {
-        dev.log('[DIAG] skipToPrevious: position > 3s, '
+        _diag('[DIAG] skipToPrevious: position > 3s, '
             'seeking to beginning of current track');
         await _player.seek(Duration.zero);
         return;
@@ -466,17 +546,20 @@ class MusicAudioHandler extends BaseAudioHandler
         // 列表循环模式下，开头回到最后一首
         prevIdx = total - 1;
       } else {
-        dev.log('[DIAG] skipToPrevious: no previous track available');
+        _diag('[DIAG] skipToPrevious: no previous track available');
         return;
       }
 
-      dev.log('[DIAG] skipToPrevious: seeking to index $prevIdx');
+      _diag('[DIAG] skipToPrevious: seeking to index $prevIdx');
       await _player.seek(Duration.zero, index: prevIdx);
       // 立即更新自维护的 _currentIndex
       _currentIndex = prevIdx;
-      dev.log('[DIAG] skipToPrevious DONE: $currentIdx → $prevIdx');
+      if (prevIdx >= 0 && prevIdx < queue.value.length) {
+        mediaItem.add(queue.value[prevIdx]);
+      }
+      _diag('[DIAG] skipToPrevious DONE: $currentIdx → $prevIdx');
     } catch (e, st) {
-      dev.log('[DIAG] skipToPrevious FAILED: $e', error: e, stackTrace: st);
+      _diag('[DIAG] skipToPrevious FAILED: $e', error: e, stackTrace: st);
       final prevIndex = _currentIndex - 1;
       if (prevIndex >= 0) {
         await _forceSkipToIndex(prevIndex);
@@ -493,7 +576,7 @@ class MusicAudioHandler extends BaseAudioHandler
     final items = queue.value;
     if (index < 0 || index >= items.length) return;
 
-    dev.log('[DIAG] _safeSkipToIndex($index): '
+    _diag('[DIAG] _safeSkipToIndex($index): '
         '_currentIndex=$_currentIndex, '
         'title="${items[index].title}"');
 
@@ -502,10 +585,11 @@ class MusicAudioHandler extends BaseAudioHandler
       // mediaItem 更新由 sequenceStateStream listener 自动处理。
       await _player.seek(Duration.zero, index: index);
       _currentIndex = index;
-      dev.log('[DIAG] _safeSkipToIndex($index) seek succeeded, '
+      mediaItem.add(items[index]);
+      _diag('[DIAG] _safeSkipToIndex($index) seek succeeded, '
           '_player.currentIndex=${_player.currentIndex}');
     } catch (e, st) {
-      dev.log('[DIAG] _safeSkipToIndex($index) seek FAILED: $e',
+      _diag('[DIAG] _safeSkipToIndex($index) seek FAILED: $e',
           error: e, stackTrace: st);
       // seek 失败时回退到 setAudioSource
       await _forceSkipToIndex(index);
@@ -525,12 +609,12 @@ class MusicAudioHandler extends BaseAudioHandler
     if (_skipInProgress) return;
     final currentIdx = _currentIndex;
     final total = queue.value.length;
-    dev.log('[DIAG] _trySkipOnError: currentIdx=$currentIdx, total=$total');
+    _diag('[DIAG] _trySkipOnError: currentIdx=$currentIdx, total=$total');
     if (currentIdx < total - 1) {
-      dev.log('[DIAG] Auto-skipping from $currentIdx to ${currentIdx + 1} after error');
+      _diag('[DIAG] Auto-skipping from $currentIdx to ${currentIdx + 1} after error');
       skipToNext();
     } else {
-      dev.log('[DIAG] Last track failed, stopping playback');
+      _diag('[DIAG] Last track failed, stopping playback');
       _player.stop();
     }
   }
@@ -541,14 +625,14 @@ class MusicAudioHandler extends BaseAudioHandler
     final currentIdx = _currentIndex;
     final items = queue.value;
     if (currentIdx < 0 || currentIdx >= items.length) {
-      dev.log('[DIAG] _retryCurrentTrack: index $currentIdx out of range, '
+      _diag('[DIAG] _retryCurrentTrack: index $currentIdx out of range, '
           'trying skipOnError');
       _trySkipOnError();
       return;
     }
 
     final resumePosition = _player.position;
-    dev.log('[DIAG] _retryCurrentTrack ENTER: index=$currentIdx, '
+    _diag('[DIAG] _retryCurrentTrack ENTER: index=$currentIdx, '
         'position=$resumePosition, '
         'title="${items[currentIdx].title}", '
         'processingState=${_player.processingState}');
@@ -565,9 +649,9 @@ class MusicAudioHandler extends BaseAudioHandler
         await _player.seek(resumePosition);
       }
       await _player.play();
-      dev.log('[DIAG] _retryCurrentTrack SUCCEEDED');
+      _diag('[DIAG] _retryCurrentTrack SUCCEEDED');
     } catch (e, st) {
-      dev.log('[DIAG] _retryCurrentTrack FAILED: $e',
+      _diag('[DIAG] _retryCurrentTrack FAILED: $e',
           error: e, stackTrace: st);
       _trySkipOnError();
     }
@@ -583,14 +667,14 @@ class MusicAudioHandler extends BaseAudioHandler
     final wasPlaying = _player.playing;
     final items = queue.value;
 
-    dev.log('[DIAG] _attemptRecovery ENTER: index=$currentIdx, '
+    _diag('[DIAG] _attemptRecovery ENTER: index=$currentIdx, '
         'position=$position, wasPlaying=$wasPlaying, '
         'queueSize=${items.length}, '
         'processingState=${_player.processingState}, '
         'title="${currentIdx >= 0 && currentIdx < items.length ? items[currentIdx].title : '<OOB>'}"');
 
     if (items.isEmpty) {
-      dev.log('[DIAG] _attemptRecovery: empty queue, aborting');
+      _diag('[DIAG] _attemptRecovery: empty queue, aborting');
       return;
     }
 
@@ -601,7 +685,7 @@ class MusicAudioHandler extends BaseAudioHandler
       _playlist = ConcatenatingAudioSource(children: sources);
 
       final safeIdx = currentIdx.clamp(0, items.length - 1);
-      dev.log('[DIAG] _attemptRecovery: setAudioSource at index=$safeIdx');
+      _diag('[DIAG] _attemptRecovery: setAudioSource at index=$safeIdx');
       await _player.setAudioSource(_playlist, initialIndex: safeIdx);
       if (position > Duration.zero) {
         await _player.seek(position);
@@ -613,11 +697,11 @@ class MusicAudioHandler extends BaseAudioHandler
       if (wasPlaying) {
         await _player.play();
       }
-      dev.log('[DIAG] _attemptRecovery SUCCEEDED: '
+      _diag('[DIAG] _attemptRecovery SUCCEEDED: '
           '_player.currentIndex=${_player.currentIndex}, '
           'position=${_player.position}');
     } catch (e, st) {
-      dev.log('[DIAG] _attemptRecovery FAILED: $e',
+      _diag('[DIAG] _attemptRecovery FAILED: $e',
           error: e, stackTrace: st);
       // 广播错误状态，让 UI 显示错误
       playbackState.add(PlaybackState(
@@ -639,7 +723,7 @@ class MusicAudioHandler extends BaseAudioHandler
     final items = queue.value;
     if (index < 0 || index >= items.length) return;
 
-    dev.log('[DIAG] _forceSkipToIndex($index): '
+    _diag('[DIAG] _forceSkipToIndex($index): '
         'title="${items[index].title}", '
         '_currentIndex=$_currentIndex');
 
@@ -649,9 +733,9 @@ class MusicAudioHandler extends BaseAudioHandler
       _currentIndex = index;
       mediaItem.add(items[index]);
       await _player.play();
-      dev.log('[DIAG] _forceSkipToIndex($index) SUCCEEDED');
+      _diag('[DIAG] _forceSkipToIndex($index) SUCCEEDED');
     } catch (e, st) {
-      dev.log('[DIAG] _forceSkipToIndex($index) FAILED: $e',
+      _diag('[DIAG] _forceSkipToIndex($index) FAILED: $e',
           error: e, stackTrace: st);
       if (index < items.length - 1) {
         await _forceSkipToIndex(index + 1);
@@ -661,7 +745,7 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> stop() async {
-    dev.log('[DIAG] stop() called');
+    _diag('[DIAG] stop() called');
     _healthCheckTimer?.cancel();
     await _player.stop();
     await _player.dispose();
@@ -676,7 +760,7 @@ class MusicAudioHandler extends BaseAudioHandler
       AudioServiceRepeatMode.one => LoopMode.one,
     };
 
-    dev.log('[DIAG] setRepeatMode: repeatMode=$repeatMode → loopMode=$loopMode, '
+    _diag('[DIAG] setRepeatMode: repeatMode=$repeatMode → loopMode=$loopMode, '
         'current _player.loopMode=${_player.loopMode}, '
         '_currentIndex=$_currentIndex, '
         'position=${_player.position}');
@@ -690,14 +774,14 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 改为：物理打乱 ConcatenatingAudioSource 的子项顺序，
   /// 当前播放曲目始终放在 index=0，然后 setAudioSource() 重新加载。
   /// 关闭 shuffle 时恢复原始队列顺序，定位到当前播放曲目的原始位置。
-  Future<void> setShuffle(bool enabled) async {
-    dev.log('[DIAG] setShuffle($enabled) ENTER: '
+  Future<void> setShuffle(bool enabled, {bool rebuild = true}) async {
+    _diag('[DIAG] setShuffle($enabled, rebuild=$rebuild) ENTER: '
         '_shuffleEnabled=$_shuffleEnabled, '
         '_currentIndex=$_currentIndex, '
         'position=${_player.position}, '
         'playing=${_player.playing}');
     if (enabled == _shuffleEnabled) {
-      dev.log('[DIAG] setShuffle: no-op, already $_shuffleEnabled');
+      _diag('[DIAG] setShuffle: no-op, already $_shuffleEnabled');
       return;
     }
     _shuffleEnabled = enabled;
@@ -723,10 +807,19 @@ class MusicAudioHandler extends BaseAudioHandler
             item.extras?['songId'] == currentTag.extras?['songId']);
         shuffled.insert(0, currentTag);
       }
-      // 3. 更新 queue + 重建 audio source
-      queue.add(shuffled);
-      await _rebuildAudioSource(shuffled, 0, currentPosition);
-      dev.log('setShuffle(true): shuffled ${shuffled.length} items, '
+      // 3. 更新 queue，并尽量原地重排 playlist，避免触发 setAudioSource
+      if (rebuild) {
+        await _reorderQueuePreservingPlayback(
+          shuffled,
+          currentIndexAfterReorder: 0,
+          position: currentPosition,
+        );
+      } else {
+        queue.add(shuffled);
+        _currentIndex = 0;
+        mediaItem.add(shuffled[0]);
+      }
+      _diag('[DIAG] setShuffle(true): shuffled ${shuffled.length} items, '
           'current="${currentTag?.title}" at index=0');
     } else {
       // ── 关闭 Shuffle ──
@@ -740,10 +833,25 @@ class MusicAudioHandler extends BaseAudioHandler
         if (restoredIndex < 0) restoredIndex = 0;
       }
       // 恢复原始队列
-      queue.add(List<MediaItem>.from(_originalQueue));
-      await _rebuildAudioSource(_originalQueue, restoredIndex, currentPosition);
-      dev.log('setShuffle(false): restored original order, '
-          'current="${currentTag?.title}" at index=$restoredIndex');
+      if (rebuild) {
+        await _reorderQueuePreservingPlayback(
+          _originalQueue,
+          currentIndexAfterReorder: restoredIndex,
+          position: currentPosition,
+        );
+        _diag('[DIAG] setShuffle(false): restored original order, '
+            'current="${currentTag?.title}" at index=$restoredIndex');
+      } else {
+        // 不重建播放器，只切换逻辑上的 shuffle 开关。
+        // 这样可以避免 setAudioSource 导致的进度闪回 0。
+        queue.add(List<MediaItem>.from(_originalQueue));
+        _currentIndex = restoredIndex;
+        if (restoredIndex >= 0 && restoredIndex < _originalQueue.length) {
+          mediaItem.add(_originalQueue[restoredIndex]);
+        }
+        _diag('[DIAG] setShuffle(false): disable shuffle without rebuild, '
+            'preserve current physical queue order');
+      }
       _originalQueue = [];
     }
 
@@ -760,7 +868,7 @@ class MusicAudioHandler extends BaseAudioHandler
     int initialIndex,
     Duration position,
   ) async {
-    dev.log('[DIAG] _rebuildAudioSource ENTER: '
+    _diag('[DIAG] _rebuildAudioSource ENTER: '
         'items=${items.length}, initialIndex=$initialIndex, '
         'position=$position, '
         'playing=${_player.playing}');
@@ -768,18 +876,18 @@ class MusicAudioHandler extends BaseAudioHandler
     final sources = items.map(_audioSourceFromItem).toList();
     _playlist = ConcatenatingAudioSource(children: sources);
 
-    dev.log('[DIAG] _rebuildAudioSource: calling setAudioSource...');
+    _diag('[DIAG] _rebuildAudioSource: calling setAudioSource...');
     await _player.setAudioSource(_playlist, initialIndex: initialIndex);
-    dev.log('[DIAG] _rebuildAudioSource: setAudioSource done, '
+    _diag('[DIAG] _rebuildAudioSource: setAudioSource done, '
         '_player.position=${_player.position}, '
         '_player.currentIndex=${_player.currentIndex}');
 
     // 同步自维护的 _currentIndex
     _currentIndex = initialIndex;
     if (position > Duration.zero) {
-      dev.log('[DIAG] _rebuildAudioSource: seeking to $position');
+      _diag('[DIAG] _rebuildAudioSource: seeking to $position');
       await _player.seek(position);
-      dev.log('[DIAG] _rebuildAudioSource: seek done, '
+      _diag('[DIAG] _rebuildAudioSource: seek done, '
           '_player.position=${_player.position}');
     }
     // 手动同步 mediaItem（setAudioSource 会触发 sequenceStateStream，
@@ -787,7 +895,7 @@ class MusicAudioHandler extends BaseAudioHandler
     if (initialIndex >= 0 && initialIndex < items.length) {
       mediaItem.add(items[initialIndex]);
     }
-    dev.log('[DIAG] _rebuildAudioSource DONE');
+    _diag('[DIAG] _rebuildAudioSource DONE');
   }
 
   @override
