@@ -4,6 +4,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:ohmymusic/core/audio/audio_handler.dart';
@@ -20,6 +21,10 @@ Future<void> main() async {
 
   // Linux/Windows 需要 media_kit 后端来支持 just_audio
   if (Platform.isLinux || Platform.isWindows) {
+    // 显式设置 mpv 日志级别与缓冲区大小，减少无关噪音并提升流式读取稳定性。
+    JustAudioMediaKit.mpvLogLevel = MPVLogLevel.error;
+    JustAudioMediaKit.bufferSize = 64 * 1024 * 1024;
+
     // 确保 MPV 磁盘缓存目录存在，避免 lavf "No cache data directory" 错误。
     // media_kit 默认启用 cache-on-disk 但不设置 cache-dir，
     // 需要预先创建目录供 MPV 使用。
