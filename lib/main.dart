@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:ohmymusic/core/audio/audio_handler.dart';
 import 'package:ohmymusic/core/database/app_database.dart';
+import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/image_cache_config.dart';
 import 'package:ohmymusic/features/auth/data/repositories/auth_repository.dart';
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
@@ -18,6 +19,7 @@ import 'package:ohmymusic/app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ImageCacheConfig.configure();
+  await DiagnosticLogger.instance.init();
 
   // Linux/Windows 需要 media_kit 后端来支持 just_audio
   if (Platform.isLinux || Platform.isWindows) {
