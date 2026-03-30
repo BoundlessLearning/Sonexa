@@ -4,11 +4,15 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 
 export 'package:audio_service/audio_service.dart' show AudioServiceRepeatMode;
 
 class MusicAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
+  static const Duration _playerOperationTimeout = Duration(seconds: 12);
+  static const Duration _seekGuardWindow = Duration(seconds: 3);
+
   MusicAudioHandler()
       : _player = AudioPlayer(),
         _playlist = ConcatenatingAudioSource(children: []) {
@@ -42,6 +46,10 @@ class MusicAudioHandler extends BaseAudioHandler
   Duration _lastBufferedPosition = Duration.zero;
   int _staleBufferCount = 0;
   static const int _maxStaleBufferChecks = 3; // 3 次 × 5 秒 = 15 秒无缓冲推进则触发恢复
+  int? _guardedSeekIndex;
+  MediaItem? _guardedSeekItem;
+  Duration? _guardedSeekResumePosition;
+  DateTime? _seekGuardUntil;
 
   Stream<Duration> get positionStream => _player.positionStream;
   Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
@@ -52,17 +60,55 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 当前是否处于手动 shuffle 模式
   bool get shuffleEnabled => _shuffleEnabled;
 
+  bool get _seekGuardActive =>
+      _seekGuardUntil != null && DateTime.now().isBefore(_seekGuardUntil!);
+
   /// 终端可见的诊断日志。
   /// Linux 桌面环境下 `dart:developer.log` 默认不输出到 stdout，
   /// 因此统一使用 debugPrint 作为调试主通道。
   void _diag(String message, {Object? error, StackTrace? stackTrace}) {
-    debugPrint(message);
+    unawaited(DiagnosticLogger.instance.log(message));
     if (error != null) {
-      debugPrint('[DIAG] error=$error');
+      unawaited(DiagnosticLogger.instance.log('[DIAG] error=$error'));
     }
     if (stackTrace != null) {
       debugPrintStack(label: '[DIAG] stackTrace', stackTrace: stackTrace);
+      unawaited(
+        DiagnosticLogger.instance.log('[DIAG] stackTrace=$stackTrace'),
+      );
     }
+  }
+
+  Future<T> _withTimeout<T>(Future<T> future, String operation) {
+    return future.timeout(
+      _playerOperationTimeout,
+      onTimeout: () => throw TimeoutException(
+        '$operation timed out after ${_playerOperationTimeout.inSeconds}s',
+      ),
+    );
+  }
+
+  void _startSeekGuard({
+    required int index,
+    required MediaItem? item,
+    required Duration resumePosition,
+  }) {
+    _guardedSeekIndex = index;
+    _guardedSeekItem = item;
+    _guardedSeekResumePosition = resumePosition;
+    _seekGuardUntil = DateTime.now().add(_seekGuardWindow);
+    _diag('[DIAG] seek guard armed: index=$index, '
+        'resumePosition=$resumePosition, title="${item?.title}"');
+  }
+
+  void _clearSeekGuard(String reason) {
+    if (_guardedSeekIndex != null || _seekGuardUntil != null) {
+      _diag('[DIAG] seek guard cleared: reason=$reason');
+    }
+    _guardedSeekIndex = null;
+    _guardedSeekItem = null;
+    _guardedSeekResumePosition = null;
+    _seekGuardUntil = null;
   }
 
   Future<void> _init() async {
@@ -128,6 +174,14 @@ class MusicAudioHandler extends BaseAudioHandler
       final idx = sequenceState.currentIndex;
       final loopMode = sequenceState.loopMode;
       final shuffleMode = sequenceState.shuffleModeEnabled;
+      if (_seekGuardActive &&
+          _guardedSeekIndex != null &&
+          idx != _guardedSeekIndex) {
+        _diag('[DIAG] sequenceState IGNORED by seek guard: '
+            'incomingIdx=$idx, guardedIdx=$_guardedSeekIndex, '
+            'incomingTitle="${tag is MediaItem ? tag.title : '<non-media>'}"');
+        return;
+      }
       if (tag is MediaItem) {
         final prevIdx = _currentIndex;
         final prevTitle = mediaItem.valueOrNull?.title ?? '<null>';
@@ -161,6 +215,12 @@ class MusicAudioHandler extends BaseAudioHandler
           'queueLen=${queue.value.length}, '
           'position=${_player.position}, '
           'duration=${_player.duration}');
+      if (state == ProcessingState.idle && _seekGuardActive) {
+        _diag('[DIAG] processingState idle during seek guard — '
+            'triggering _retryCurrentTrack');
+        unawaited(_retryCurrentTrack());
+        return;
+      }
       if (state == ProcessingState.completed) {
         // ConcatenatingAudioSource 在 LoopMode.off 时会自动播放下一首，
         // 在 LoopMode.all 时会自动 wrap。不再手动调用 skipToNext()。
@@ -181,6 +241,17 @@ class MusicAudioHandler extends BaseAudioHandler
           !_skipInProgress &&
           queue.value.isNotEmpty &&
           !state.playing) {
+        if (_seekGuardActive) {
+          _diag('[DIAG] Player IDLE during seek guard — keeping guarded track identity');
+          final guardedIndex = _guardedSeekIndex;
+          final guardedItem = _guardedSeekItem;
+          if (guardedIndex != null &&
+              guardedIndex >= 0 &&
+              guardedIndex < queue.value.length) {
+            _currentIndex = guardedIndex;
+            mediaItem.add(guardedItem ?? queue.value[guardedIndex]);
+          }
+        }
         _diag('[DIAG] ⚠ Player IDLE with non-empty queue — '
             'scheduling recovery in 500ms');
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -363,7 +434,10 @@ class MusicAudioHandler extends BaseAudioHandler
 
     try {
       _playlist = ConcatenatingAudioSource(children: sources);
-      await _player.setAudioSource(_playlist, initialIndex: initialIndex);
+      await _withTimeout(
+        _player.setAudioSource(_playlist, initialIndex: initialIndex),
+        'loadAndPlay.setAudioSource',
+      );
 
       // 同步自维护的 _currentIndex
       _currentIndex = initialIndex;
@@ -380,6 +454,12 @@ class MusicAudioHandler extends BaseAudioHandler
         await setShuffle(true);
       } else {
         await play();
+      }
+    } on TimeoutException catch (e, st) {
+      _diag('[DIAG] loadAndPlay TIMEOUT at index $initialIndex: $e',
+          error: e, stackTrace: st);
+      if (initialIndex < items.length - 1) {
+        await loadAndPlay(items, initialIndex: initialIndex + 1);
       }
     } catch (e, st) {
       _diag('[DIAG] loadAndPlay FAILED at index $initialIndex: $e',
@@ -420,7 +500,7 @@ class MusicAudioHandler extends BaseAudioHandler
     }
 
     try {
-      await _player.play();
+      await _withTimeout(_player.play(), 'play');
       _diag('[DIAG] play() succeeded');
     } catch (e, st) {
       _diag('[DIAG] play() FAILED: $e', error: e, stackTrace: st);
@@ -444,12 +524,35 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> seek(Duration position) async {
+    final savedIndex = _currentIndex;
+    final savedItem = mediaItem.valueOrNull;
+    final resumePosition = _player.position;
     _diag('[DIAG] seek($position) called: '
         '_currentIndex=$_currentIndex, '
         'playing=${_player.playing}');
+    _startSeekGuard(
+      index: savedIndex,
+      item: savedItem,
+      resumePosition: resumePosition,
+    );
     try {
-      await _player.seek(position);
+      await _withTimeout(_player.seek(position), 'seek');
+      Future<void>.delayed(_seekGuardWindow, () {
+        if (_seekGuardActive && _guardedSeekIndex == savedIndex) {
+          _clearSeekGuard('seek-window-expired');
+        }
+      });
+    } on TimeoutException catch (e, st) {
+      _currentIndex = savedIndex;
+      if (savedItem != null) {
+        mediaItem.add(savedItem);
+      }
+      _diag('[DIAG] seek() TIMEOUT: $e', error: e, stackTrace: st);
     } catch (e, st) {
+      _currentIndex = savedIndex;
+      if (savedItem != null) {
+        mediaItem.add(savedItem);
+      }
       _diag('[DIAG] seek() FAILED: $e', error: e, stackTrace: st);
     }
   }
@@ -622,7 +725,9 @@ class MusicAudioHandler extends BaseAudioHandler
   /// [Round8-F5] 播放恢复失败时，用全新的 AudioSource 重新加载当前曲目。
   /// 重建 _playlist 以确保 HTTP 连接是全新的（解决长时间暂停后连接断开的问题）。
   Future<void> _retryCurrentTrack() async {
-    final currentIdx = _currentIndex;
+    final currentIdx = _seekGuardActive && _guardedSeekIndex != null
+        ? _guardedSeekIndex!
+        : _currentIndex;
     final items = queue.value;
     if (currentIdx < 0 || currentIdx >= items.length) {
       _diag('[DIAG] _retryCurrentTrack: index $currentIdx out of range, '
@@ -642,14 +747,21 @@ class MusicAudioHandler extends BaseAudioHandler
       // 确保 HTTP 连接是全新建立的
       final sources = items.map(_audioSourceFromItem).toList();
       _playlist = ConcatenatingAudioSource(children: sources);
-      await _player.setAudioSource(_playlist, initialIndex: currentIdx);
+      await _withTimeout(
+        _player.setAudioSource(_playlist, initialIndex: currentIdx),
+        '_retryCurrentTrack.setAudioSource',
+      );
       _currentIndex = currentIdx;
       // 恢复到上次播放的位置
       if (resumePosition > Duration.zero) {
-        await _player.seek(resumePosition);
+        await _withTimeout(
+          _player.seek(resumePosition),
+          '_retryCurrentTrack.seek',
+        );
       }
-      await _player.play();
+      await _withTimeout(_player.play(), '_retryCurrentTrack.play');
       _diag('[DIAG] _retryCurrentTrack SUCCEEDED');
+      _clearSeekGuard('_retryCurrentTrack-succeeded');
     } catch (e, st) {
       _diag('[DIAG] _retryCurrentTrack FAILED: $e',
           error: e, stackTrace: st);
@@ -662,8 +774,12 @@ class MusicAudioHandler extends BaseAudioHandler
   /// 与之前的实现不同，这里会用 queue.value 重新创建 _playlist（全新的
   /// AudioSource.uri 实例），避免使用已经断开 HTTP 连接的旧 AudioSource 对象。
   Future<void> _attemptRecovery() async {
-    final currentIdx = _currentIndex;
-    final position = _player.position;
+    final currentIdx = _seekGuardActive && _guardedSeekIndex != null
+        ? _guardedSeekIndex!
+        : _currentIndex;
+    final position = _seekGuardActive && _guardedSeekResumePosition != null
+        ? _guardedSeekResumePosition!
+        : _player.position;
     final wasPlaying = _player.playing;
     final items = queue.value;
 
@@ -686,20 +802,27 @@ class MusicAudioHandler extends BaseAudioHandler
 
       final safeIdx = currentIdx.clamp(0, items.length - 1);
       _diag('[DIAG] _attemptRecovery: setAudioSource at index=$safeIdx');
-      await _player.setAudioSource(_playlist, initialIndex: safeIdx);
+      await _withTimeout(
+        _player.setAudioSource(_playlist, initialIndex: safeIdx),
+        '_attemptRecovery.setAudioSource',
+      );
       if (position > Duration.zero) {
-        await _player.seek(position);
+        await _withTimeout(
+          _player.seek(position),
+          '_attemptRecovery.seek',
+        );
       }
       // 手动同步 mediaItem
       mediaItem.add(items[safeIdx]);
       _currentIndex = safeIdx;
 
       if (wasPlaying) {
-        await _player.play();
+        await _withTimeout(_player.play(), '_attemptRecovery.play');
       }
       _diag('[DIAG] _attemptRecovery SUCCEEDED: '
           '_player.currentIndex=${_player.currentIndex}, '
           'position=${_player.position}');
+      _clearSeekGuard('_attemptRecovery-succeeded');
     } catch (e, st) {
       _diag('[DIAG] _attemptRecovery FAILED: $e',
           error: e, stackTrace: st);
