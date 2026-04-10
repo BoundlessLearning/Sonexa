@@ -447,27 +447,19 @@ class _PlayModeButton extends ConsumerWidget {
         debugPrint('[DIAG] PlayMode switch: $mode → $nextMode');
         ref.read(playModeProvider.notifier).state = nextMode;
 
-        // [Round8-F1] 将播放模式同步到音频处理器。
-        // 必须 await setShuffle()，因为它可能触发 _rebuildAudioSource()
-        // （从 shuffle 切到其他模式时），需要等它完成后再设置 repeat mode，
-        // 避免并发导致进度条短暂归零闪烁。
         switch (nextMode) {
           case PlayMode.sequential:
-            debugPrint('[DIAG] PlayMode.sequential: setShuffle(false) then setRepeatMode(none)');
-            await audioHandler.setShuffle(false);
-            await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
+            debugPrint('[DIAG] PlayMode.sequential: setPlayMode(sequential)');
+            await audioHandler.setPlayMode(ah.PlaybackMode.sequential);
           case PlayMode.shuffle:
-            debugPrint('[DIAG] PlayMode.shuffle: setRepeatMode(none) then setShuffle(true)');
-            await audioHandler.setRepeatMode(AudioServiceRepeatMode.none);
-            await audioHandler.setShuffle(true);
+            debugPrint('[DIAG] PlayMode.shuffle: setPlayMode(shuffle)');
+            await audioHandler.setPlayMode(ah.PlaybackMode.shuffle);
           case PlayMode.repeatOne:
-            debugPrint('[DIAG] PlayMode.repeatOne: setShuffle(false) then setRepeatMode(one)');
-            await audioHandler.setShuffle(false);
-            await audioHandler.setRepeatMode(AudioServiceRepeatMode.one);
+            debugPrint('[DIAG] PlayMode.repeatOne: setPlayMode(repeatOne)');
+            await audioHandler.setPlayMode(ah.PlaybackMode.repeatOne);
           case PlayMode.repeatAll:
-            debugPrint('[DIAG] PlayMode.repeatAll: setShuffle(false) then setRepeatMode(all)');
-            await audioHandler.setShuffle(false);
-            await audioHandler.setRepeatMode(AudioServiceRepeatMode.all);
+            debugPrint('[DIAG] PlayMode.repeatAll: setPlayMode(repeatAll)');
+            await audioHandler.setPlayMode(ah.PlaybackMode.repeatAll);
         }
         debugPrint('[DIAG] PlayMode switch DONE: $nextMode');
       },
