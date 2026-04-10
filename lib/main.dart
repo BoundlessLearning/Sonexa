@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
@@ -7,81 +8,240 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:ohmymusic/app.dart';
 import 'package:ohmymusic/core/audio/audio_handler.dart';
+import 'package:ohmymusic/core/audio/windows_media_controls.dart';
 import 'package:ohmymusic/core/database/app_database.dart';
 import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/image_cache_config.dart';
 import 'package:ohmymusic/features/auth/data/repositories/auth_repository.dart';
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
-import 'package:ohmymusic/app.dart';
+
+class _BootstrapData {
+  const _BootstrapData({
+    required this.database,
+    required this.audioHandler,
+    required this.savedServer,
+  });
+
+  final AppDatabase database;
+  final MusicAudioHandler audioHandler;
+  final dynamic savedServer;
+}
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  ImageCacheConfig.configure();
-  await DiagnosticLogger.instance.init();
+  await runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      ImageCacheConfig.configure();
+      await DiagnosticLogger.instance.init(overwrite: true);
 
-  // Linux/Windows 需要 media_kit 后端来支持 just_audio
-  if (Platform.isLinux || Platform.isWindows) {
-    // 显式设置 mpv 日志级别与缓冲区大小，减少无关噪音并提升流式读取稳定性。
-    JustAudioMediaKit.mpvLogLevel = MPVLogLevel.error;
-    JustAudioMediaKit.bufferSize = 64 * 1024 * 1024;
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        final stack = details.stack?.toString() ?? '<no-stack>';
+        unawaited(
+          DiagnosticLogger.instance
+              .log('[FLUTTER_ERROR] ${details.exceptionAsString()}\n$stack'),
+        );
+      };
 
-    // 确保 MPV 磁盘缓存目录存在，避免 lavf "No cache data directory" 错误。
-    // media_kit 默认启用 cache-on-disk 但不设置 cache-dir，
-    // 需要预先创建目录供 MPV 使用。
-    try {
-      final cacheDir = await getTemporaryDirectory();
-      final mpvCacheDir = Directory('${cacheDir.path}/mpv_cache');
-      if (!mpvCacheDir.existsSync()) {
-        mpvCacheDir.createSync(recursive: true);
+      await DiagnosticLogger.instance.log(
+        '[DIAG] logger initialized: path=${DiagnosticLogger.instance.logFilePath}',
+      );
+
+      if (Platform.isLinux || Platform.isWindows) {
+        JustAudioMediaKit.mpvLogLevel = MPVLogLevel.error;
+        JustAudioMediaKit.bufferSize = 64 * 1024 * 1024;
+
+        try {
+          final cacheDir = await getTemporaryDirectory();
+          final mpvCacheDir = Directory('${cacheDir.path}/mpv_cache');
+          if (!mpvCacheDir.existsSync()) {
+            mpvCacheDir.createSync(recursive: true);
+          }
+        } catch (_) {
+          // 缓存目录创建失败不影响播放功能，仅会产生控制台警告
+        }
+
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        final bundledMpv = '$exeDir/lib/libmpv.so';
+        if (File(bundledMpv).existsSync()) {
+          JustAudioMediaKit.ensureInitialized(libmpv: bundledMpv);
+        } else {
+          JustAudioMediaKit.ensureInitialized();
+        }
       }
-    } catch (_) {
-      // 缓存目录创建失败不影响播放功能，仅会产生控制台警告
-    }
 
-    // 优先使用与可执行文件同目录下 lib/ 中的 libmpv（打包分发场景）
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    final bundledMpv = '$exeDir/lib/libmpv.so';
-    if (File(bundledMpv).existsSync()) {
-      JustAudioMediaKit.ensureInitialized(libmpv: bundledMpv);
-    } else {
-      // 回退到系统安装的 libmpv
-      JustAudioMediaKit.ensureInitialized();
-    }
+      runApp(const _BootstrapApp());
+    },
+    (error, stackTrace) {
+      stderr.writeln('[FATAL] $error');
+      stderr.writeln(stackTrace);
+      unawaited(
+        DiagnosticLogger.instance.log('[FATAL] $error\n$stackTrace'),
+      );
+    },
+    zoneSpecification: ZoneSpecification(
+      print: (self, parent, zone, line) {
+        parent.print(zone, line);
+        unawaited(DiagnosticLogger.instance.captureConsoleLine(line));
+      },
+    ),
+  );
+}
+
+class _BootstrapApp extends StatefulWidget {
+  const _BootstrapApp();
+
+  @override
+  State<_BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<_BootstrapApp> {
+  late Future<_BootstrapData> _bootstrapFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrapFuture = _bootstrap();
   }
 
-  // 初始化数据库
-  final database = AppDatabase();
+  Future<_BootstrapData> _bootstrap() async {
+    final database = AppDatabase();
+    final authRepo = AuthRepository(database);
+    final savedServer = await authRepo.getActiveServer();
 
-  // 预加载已保存的活跃服务器配置，避免 FutureProvider 异步加载时路由重定向到登录页
-  final authRepo = AuthRepository(database);
-  final savedServer = await authRepo.getActiveServer();
+    final audioHandler = await AudioService.init(
+      builder: () => MusicAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.ohmymusic.audio',
+        androidNotificationChannelName: 'OhMyMusic 音乐播放',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: true,
+      ),
+    ).timeout(
+      const Duration(seconds: 20),
+      onTimeout: () {
+        throw TimeoutException('AudioService.init timed out after 20s');
+      },
+    );
 
-  // 初始化音频服务
-  final audioHandler = await AudioService.init(
-    builder: () => MusicAudioHandler(),
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.ohmymusic.audio',
-      androidNotificationChannelName: 'OhMyMusic 音乐播放',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
-    ),
-  );
+    if (Platform.isWindows) {
+      unawaited(WindowsMediaControls.initialize(audioHandler));
+    }
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        databaseProvider.overrideWithValue(database),
-        audioHandlerProvider.overrideWithValue(audioHandler),
-        // 用预加载的服务器配置覆盖 activeServerProvider，
-        // Future.value 通过微任务交付结果，首帧仍为 AsyncLoading；
-        // 下游 FutureProvider 使用 .future 等待加载完成
-        activeServerProvider.overrideWith(
-          (_) => Future.value(savedServer),
+    return _BootstrapData(
+      database: database,
+      audioHandler: audioHandler,
+      savedServer: savedServer,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_BootstrapData>(
+      future: _bootstrapFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: _BootstrapLoadingScreen(),
+          );
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          final error = snapshot.error?.toString() ?? 'Unknown startup error';
+          unawaited(
+            DiagnosticLogger.instance.log('[DIAG] bootstrap failed: $error'),
+          );
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: _BootstrapErrorScreen(
+              error: error,
+              onRetry: () {
+                setState(() {
+                  _bootstrapFuture = _bootstrap();
+                });
+              },
+            ),
+          );
+        }
+
+        final data = snapshot.data!;
+        return ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(data.database),
+            audioHandlerProvider.overrideWithValue(data.audioHandler),
+            activeServerProvider.overrideWith(
+              (_) => Future.value(data.savedServer),
+            ),
+          ],
+          child: const OhMyMusicApp(),
+        );
+      },
+    );
+  }
+}
+
+class _BootstrapLoadingScreen extends StatelessWidget {
+  const _BootstrapLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Initializing OhMyMusic...'),
+          ],
         ),
-      ],
-      child: const OhMyMusicApp(),
-    ),
-  );
+      ),
+    );
+  }
+}
+
+class _BootstrapErrorScreen extends StatelessWidget {
+  const _BootstrapErrorScreen({
+    required this.error,
+    required this.onRetry,
+  });
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 56),
+              const SizedBox(height: 16),
+              const Text(
+                'Startup failed',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                error,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: onRetry,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

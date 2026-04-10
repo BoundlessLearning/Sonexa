@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 应用级诊断日志落盘工具。
@@ -19,7 +18,7 @@ class DiagnosticLogger {
 
   String? get logFilePath => _logFile?.path;
 
-  Future<void> init() async {
+  Future<void> init({bool overwrite = true}) async {
     try {
       final appDir = await getApplicationSupportDirectory();
       final logDir = Directory('${appDir.path}/logs');
@@ -28,21 +27,23 @@ class DiagnosticLogger {
       }
 
       _logFile = File('${logDir.path}/diagnostic.log');
-      if (!_logFile!.existsSync()) {
+      if (overwrite && _logFile!.existsSync()) {
+        _logFile!.writeAsStringSync('');
+      } else if (!_logFile!.existsSync()) {
         _logFile!.createSync(recursive: true);
       }
-
-      await _rotateIfNeeded();
-      await log('[DIAG] logger initialized: path=${_logFile!.path}');
     } catch (error, stackTrace) {
-      debugPrint('[DIAG] logger init failed: $error');
-      debugPrintStack(stackTrace: stackTrace);
+      stderr.writeln('[DIAG] logger init failed: $error');
+      stderr.writeln(stackTrace);
     }
   }
 
   Future<void> log(String message) async {
-    final line = '${DateTime.now().toIso8601String()} $message';
-    debugPrint(message);
+    print(message);
+  }
+
+  Future<void> captureConsoleLine(String line) async {
+    final message = '${DateTime.now().toIso8601String()} $line';
 
     final file = _logFile;
     if (file == null) {
@@ -51,34 +52,14 @@ class DiagnosticLogger {
 
     _pendingWrite = _pendingWrite.then((_) async {
       try {
-        await _rotateIfNeeded();
-        await file.writeAsString('$line\n', mode: FileMode.append, flush: true);
+        await file.writeAsString('$message\n',
+            mode: FileMode.append, flush: true);
       } catch (error, stackTrace) {
-        debugPrint('[DIAG] logger write failed: $error');
-        debugPrintStack(stackTrace: stackTrace);
+        stderr.writeln('[DIAG] logger write failed: $error');
+        stderr.writeln(stackTrace);
       }
     });
 
     await _pendingWrite;
-  }
-
-  Future<void> _rotateIfNeeded() async {
-    final file = _logFile;
-    if (file == null || !file.existsSync()) {
-      return;
-    }
-
-    final length = await file.length();
-    const maxBytes = 2 * 1024 * 1024;
-    if (length < maxBytes) {
-      return;
-    }
-
-    final backup = File('${file.path}.1');
-    if (backup.existsSync()) {
-      backup.deleteSync();
-    }
-    file.renameSync(backup.path);
-    _logFile = File(file.path)..createSync(recursive: true);
   }
 }
