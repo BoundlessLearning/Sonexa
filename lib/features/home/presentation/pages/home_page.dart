@@ -196,7 +196,7 @@ class _RandomSongsSection extends StatelessWidget {
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id),
+              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
               api.getCoverArtUrl(s.coverArtId, size: 300),
             ))
         .toList();
@@ -262,7 +262,7 @@ class _SongSection extends StatelessWidget {
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id),
+              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
               api.getCoverArtUrl(s.coverArtId, size: 300),
             ))
         .toList();
@@ -381,7 +381,10 @@ class _RecentPlaySection extends ConsumerWidget {
                     duration: 0,
                   );
                   final mediaItem = song.toMediaItem(
-                    api.getStreamUrl(item.songId),
+                    api.getStreamUrl(
+                      item.songId,
+                      format: song.preferredPlaybackFormat,
+                    ),
                     coverUrl ?? '',
                   );
                   ref.read(audioHandlerProvider).loadAndPlay([mediaItem]);

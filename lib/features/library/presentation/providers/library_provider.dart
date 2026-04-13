@@ -273,9 +273,12 @@ final playlistDetailProvider =
       coverArtId: map['coverArt'] as String?,
       duration: map['duration'] as int? ?? 0,
       track: map['track'] as int?,
+      discNumber: map['discNumber'] as int?,
       year: map['year'] as int?,
       genre: map['genre'] as String?,
       bitRate: map['bitRate'] as int?,
+      suffix: map['suffix'] as String?,
+      size: map['size'] as int?,
       playCount: map['playCount'] as int? ?? 0,
     );
   }).toList();
@@ -315,9 +318,12 @@ final artistTopSongsProvider =
       coverArtId: map['coverArt'] as String?,
       duration: map['duration'] as int? ?? 0,
       track: map['track'] as int?,
+      discNumber: map['discNumber'] as int?,
       year: map['year'] as int?,
       genre: map['genre'] as String?,
       bitRate: map['bitRate'] as int?,
+      suffix: map['suffix'] as String?,
+      size: map['size'] as int?,
       playCount: map['playCount'] as int? ?? 0,
     );
   }).toList();

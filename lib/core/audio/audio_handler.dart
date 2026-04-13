@@ -59,8 +59,11 @@ class MusicAudioHandler extends BaseAudioHandler
   // ── 播放健康监控（Bug #4：进度条在走但没有声音） ──
   Timer? _healthCheckTimer;
   Duration _lastBufferedPosition = Duration.zero;
+  Duration _lastPlaybackPosition = Duration.zero;
   int _staleBufferCount = 0;
   static const int _maxStaleBufferChecks = 3; // 3 次 × 5 秒 = 15 秒无缓冲推进则触发恢复
+  static const Duration _minBufferedHeadroomForRecovery = Duration(seconds: 4);
+  static const Duration _bufferedHeadroomSafeZone = Duration(seconds: 12);
   int? _guardedSeekIndex;
   MediaItem? _guardedSeekItem;
   Duration? _guardedSeekResumePosition;
@@ -120,6 +123,17 @@ class MusicAudioHandler extends BaseAudioHandler
 
   bool _hasMp3FallbackAttempted(MediaItem item) {
     return item.extras?['fallbackFormat'] == 'mp3';
+  }
+
+  bool _requiresFreshDecoder(MediaItem item) {
+    if (item.extras?['isLocal'] == true) {
+      final suffix = (item.extras?['sourceSuffix'] as String?)?.toLowerCase();
+      return suffix == 'wav';
+    }
+
+    final sourceSuffix = (item.extras?['sourceSuffix'] as String?)?.toLowerCase();
+    final streamFormat = (item.extras?['streamFormat'] as String?)?.toLowerCase();
+    return sourceSuffix == 'wav' || streamFormat == 'mp3';
   }
 
   MediaItem _withMp3Fallback(MediaItem item) {
@@ -402,18 +416,23 @@ class MusicAudioHandler extends BaseAudioHandler
       if (!_player.playing) {
         _staleBufferCount = 0;
         _lastBufferedPosition = Duration.zero;
+        _lastPlaybackPosition = Duration.zero;
         return;
       }
 
       final currentBuffered = _player.bufferedPosition;
       final currentPosition = _player.position;
       final duration = _player.duration;
+      final bufferedHeadroom = currentBuffered > currentPosition
+          ? currentBuffered - currentPosition
+          : Duration.zero;
 
       // 如果已经播放到末尾，不算 stale
       if (duration != null &&
           currentPosition.inMilliseconds > 0 &&
           currentPosition >= duration - const Duration(seconds: 2)) {
         _staleBufferCount = 0;
+        _lastPlaybackPosition = currentPosition;
         return;
       }
 
@@ -422,6 +441,18 @@ class MusicAudioHandler extends BaseAudioHandler
           _player.processingState == ProcessingState.buffering) {
         _staleBufferCount = 0;
         _lastBufferedPosition = currentBuffered;
+        _lastPlaybackPosition = currentPosition;
+        return;
+      }
+      if (bufferedHeadroom >= _bufferedHeadroomSafeZone) {
+        if (_staleBufferCount != 0) {
+          _diag('[DIAG] Health check: reset stale counter due to safe headroom, '
+              'bufferedHeadroom=$bufferedHeadroom, '
+              'buffered=$currentBuffered, position=$currentPosition');
+        }
+        _staleBufferCount = 0;
+        _lastBufferedPosition = currentBuffered;
+        _lastPlaybackPosition = currentPosition;
         return;
       }
 
@@ -431,6 +462,7 @@ class MusicAudioHandler extends BaseAudioHandler
       if (_seekGuardActive) {
         _staleBufferCount = 0;
         _lastBufferedPosition = currentBuffered;
+        _lastPlaybackPosition = currentPosition;
         return;
       }
 
@@ -618,6 +650,22 @@ class MusicAudioHandler extends BaseAudioHandler
         _currentIndex >= 0 && _currentIndex < queue.value.length
             ? _songIdOf(queue.value[_currentIndex])
             : '';
+    final targetItem = queue.value[index];
+
+    _diag('[DIAG][STREAM] transition target: reason=$reason, '
+        '${_describeStreamForLog(targetItem)}');
+
+    if (_requiresFreshDecoder(targetItem)) {
+      _diag('[DIAG][STREAM] transition uses fresh decoder: '
+          'reason=$reason, index=$index');
+      await _forceSkipToIndex(index);
+      _recordShuffleHistory(
+        fromSongId: previousSongId,
+        toIndex: index,
+        reason: reason,
+      );
+      return;
+    }
 
     await _player.seek(Duration.zero, index: index);
     _syncCurrentTrack(index, reason: reason);
@@ -1175,10 +1223,15 @@ class MusicAudioHandler extends BaseAudioHandler
         '${_describeStreamForLog(items[index])}');
 
     try {
-      await _player.setAudioSource(_playlist, initialIndex: index);
+      final sources = items.map(_audioSourceFromItem).toList();
+      _playlist = ConcatenatingAudioSource(children: sources);
+      await _withTimeout(
+        _player.setAudioSource(_playlist, initialIndex: index),
+        '_forceSkipToIndex.setAudioSource',
+      );
       // forceSkip 是最后兜底手段，但当前曲目发布仍统一交给 sequenceState。
       _currentIndex = index;
-      await _player.play();
+      await _withTimeout(_player.play(), '_forceSkipToIndex.play');
       _diag('[DIAG] _forceSkipToIndex($index) SUCCEEDED');
     } catch (e, st) {
       _diag('[DIAG] _forceSkipToIndex($index) FAILED: $e',

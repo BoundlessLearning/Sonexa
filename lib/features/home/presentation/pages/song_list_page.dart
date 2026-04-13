@@ -81,7 +81,7 @@ class SongListPage extends ConsumerWidget {
     final audioHandler = ref.read(audioHandlerProvider);
     final items = songs
         .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id),
+              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
               api.getCoverArtUrl(s.coverArtId, size: 300),
             ))
         .toList();

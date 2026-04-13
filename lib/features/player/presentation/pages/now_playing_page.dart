@@ -220,19 +220,24 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
   @override
   Widget build(BuildContext context) {
     final positionAsync = ref.watch(positionProvider);
+    final bufferedPositionAsync = ref.watch(bufferedPositionProvider);
     final durationAsync = ref.watch(durationProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     final position = positionAsync.valueOrNull ?? Duration.zero;
+    final bufferedPosition = bufferedPositionAsync.valueOrNull ?? Duration.zero;
     final duration =
         durationAsync.valueOrNull ?? widget.mediaItem?.duration ?? Duration.zero;
 
     final maxSeconds = duration.inSeconds.toDouble();
+    final safeMaxSeconds = maxSeconds > 0 ? maxSeconds : 1.0;
+    final bufferedSeconds =
+        bufferedPosition.inSeconds.toDouble().clamp(0.0, safeMaxSeconds);
     // 拖拽中显示拖拽值，否则显示实际播放位置
     final displaySeconds = _dragging
         ? _dragValue
-        : position.inSeconds.toDouble().clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0);
+        : position.inSeconds.toDouble().clamp(0.0, safeMaxSeconds);
 
     return Column(
       children: [
@@ -243,11 +248,14 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             activeTrackColor: colorScheme.primary,
             inactiveTrackColor: colorScheme.surfaceContainerHighest,
+            secondaryActiveTrackColor:
+                colorScheme.onSurfaceVariant.withValues(alpha: 0.28),
             thumbColor: colorScheme.primary,
           ),
           child: Slider(
             value: displaySeconds,
-            max: maxSeconds > 0 ? maxSeconds : 1.0,
+            secondaryTrackValue: bufferedSeconds,
+            max: safeMaxSeconds,
             onChangeStart: (value) {
               // 开始拖拽：冻结位置更新
               setState(() {
@@ -266,6 +274,7 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
               setState(() {
                 _dragging = false;
               });
+              ref.read(playerSeekIntentProvider.notifier).state = DateTime.now();
               DiagnosticLogger.instance
                   .log('[OP] seek_bar_change_end: seconds=${value.toInt()}');
               widget.audioHandler.seek(Duration(seconds: value.toInt()));

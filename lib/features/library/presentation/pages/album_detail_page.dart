@@ -200,7 +200,10 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
     );
 
     final items = songs.map((song) {
-      final streamUrl = api.getStreamUrl(song.id);
+      final streamUrl = api.getStreamUrl(
+        song.id,
+        format: song.preferredPlaybackFormat,
+      );
       final artUrl = api.getCoverArtUrl(song.coverArtId);
       return song.toMediaItem(streamUrl, artUrl);
     }).toList();

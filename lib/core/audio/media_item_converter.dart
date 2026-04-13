@@ -3,12 +3,20 @@ import 'package:audio_service/audio_service.dart';
 import '../../features/library/domain/entities/song.dart';
 
 extension SongToMediaItem on Song {
-  /// 构建 MediaItem，优先使用本地文件路径（离线播放），否则使用流媒体 URL。
+  String? get preferredPlaybackFormat {
+    final normalizedSuffix = suffix?.trim().toLowerCase().replaceFirst('.', '');
+    return switch (normalizedSuffix) {
+      'wav' => 'mp3',
+      _ => null,
+    };
+  }
+
   MediaItem toMediaItem(String streamUrl, String coverArtUrl) {
-    // 优先使用已下载的本地文件
-    final audioUrl = (localFilePath != null && localFilePath!.isNotEmpty)
-        ? localFilePath!
-        : streamUrl;
+    final hasLocalFile = localFilePath != null && localFilePath!.isNotEmpty;
+    final normalizedSuffix = suffix?.trim().toLowerCase().replaceFirst('.', '');
+    final streamFormat = preferredPlaybackFormat ?? 'raw';
+    final useLocalFile = hasLocalFile && preferredPlaybackFormat == null;
+    final audioUrl = useLocalFile ? localFilePath! : streamUrl;
 
     return MediaItem(
       id: audioUrl,
@@ -21,8 +29,11 @@ extension SongToMediaItem on Song {
         'songId': id,
         'albumId': albumId,
         'artistId': artistId,
-        'isLocal': localFilePath != null && localFilePath!.isNotEmpty,
-        'fallbackFormat': 'raw',
+        'hasLocalFile': hasLocalFile,
+        'isLocal': useLocalFile,
+        'sourceSuffix': normalizedSuffix,
+        'streamFormat': streamFormat,
+        'fallbackFormat': streamFormat,
       },
     );
   }
