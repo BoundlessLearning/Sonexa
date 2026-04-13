@@ -119,6 +119,8 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
                 : _SearchResultList(
                     searchQuery: _searchQuery!,
                     songId: widget.songId,
+                    artist: widget.artist,
+                    title: widget.title,
                   ),
           ),
         ],
@@ -132,10 +134,14 @@ class _SearchResultList extends ConsumerWidget {
   const _SearchResultList({
     required this.searchQuery,
     required this.songId,
+    required this.artist,
+    required this.title,
   });
 
   final String searchQuery;
   final String songId;
+  final String artist;
+  final String title;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -214,7 +220,15 @@ class _SearchResultList extends ConsumerWidget {
       final repo = await ref.read(lyricsRepositoryProvider.future);
       await repo.replaceLyrics(lyrics);
       // 刷新歌词 provider 使当前页面更新
-      ref.invalidate(lyricsProvider(songId));
+      ref.invalidate(
+        lyricsProvider(
+          LyricsRequestSnapshot(
+            songId: songId,
+            artist: artist,
+            title: title,
+          ),
+        ),
+      );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

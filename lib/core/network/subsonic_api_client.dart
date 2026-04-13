@@ -313,6 +313,46 @@ class SubsonicApiClient {
     return response.payloadFor('lyrics');
   }
 
+  Future<Map<String, dynamic>?> getLyricsBySongId(String songId) async {
+    if (songId.isEmpty) {
+      return null;
+    }
+
+    final response = await _get(
+      'getLyricsBySongId',
+      params: {'id': songId},
+    );
+
+    final payload = response.payloadFor('lyricsList');
+    if (payload is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final structuredLyrics = payload['structuredLyrics'];
+    if (structuredLyrics is List && structuredLyrics.isNotEmpty) {
+      final first = structuredLyrics.first;
+      if (first is Map<String, dynamic>) {
+        return first;
+      }
+      if (first is Map) {
+        return Map<String, dynamic>.from(first);
+      }
+    }
+
+    final lyrics = payload['lyrics'];
+    if (lyrics is List && lyrics.isNotEmpty) {
+      final first = lyrics.first;
+      if (first is Map<String, dynamic>) {
+        return first;
+      }
+      if (first is Map) {
+        return Map<String, dynamic>.from(first);
+      }
+    }
+
+    return null;
+  }
+
   Future<Map<String, dynamic>> _get(
     String endpoint, {
     Map<String, dynamic>? params,

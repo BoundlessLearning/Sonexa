@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
@@ -7,6 +5,29 @@ import 'package:ohmymusic/features/library/presentation/providers/library_provid
 import 'package:ohmymusic/features/lyrics/data/repositories/lyrics_repository.dart';
 import 'package:ohmymusic/features/lyrics/domain/entities/lyrics.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+
+class LyricsRequestSnapshot {
+  const LyricsRequestSnapshot({
+    required this.songId,
+    required this.artist,
+    required this.title,
+  });
+
+  final String songId;
+  final String artist;
+  final String title;
+
+  @override
+  bool operator ==(Object other) {
+    return other is LyricsRequestSnapshot &&
+        other.songId == songId &&
+        other.artist == artist &&
+        other.title == title;
+  }
+
+  @override
+  int get hashCode => Object.hash(songId, artist, title);
+}
 
 /// 为歌词仓库创建独立的 lrclib 客户端，避免复用 Subsonic 配置。
 final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
@@ -25,35 +46,32 @@ final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
   );
 });
 
-/// [Round7-F3] 根据歌曲 ID 拉取对应歌词。
-/// 不再从 audioHandler.mediaItem.valueOrNull 做交叉校验——
-/// songId 来自 currentSongIdProvider（由 mediaItem stream 驱动），
-/// 如果 mediaItem 已更新到新歌曲，旧的 songId 的 provider 会被自动 dispose。
-/// 之前的交叉校验在 mediaItem 更新时序不一致时会返回 null 导致歌词消失。
-final lyricsProvider = FutureProvider.family<Lyrics?, String>((ref, songId) async {
-  final audioHandler = ref.read(audioHandlerProvider);
-  final mediaItem = audioHandler.mediaItem.valueOrNull;
-
-  // 从 mediaItem 获取 artist/title 用于歌词搜索
-  // 如果 mediaItem 的 songId 与请求的 songId 一致，用其 artist/title
-  // 否则只用 songId 查本地缓存（无法搜 lrclib）
-  String artist = '';
-  String title = '';
-  final currentSongId = mediaItem?.extras?['songId'] as String? ?? mediaItem?.id;
-  if (currentSongId == songId && mediaItem != null) {
-    artist = (mediaItem.artist ?? '').trim();
-    title = mediaItem.title.trim();
-  }
-
-  // 超过 8 秒未获取到歌词则放弃，UI 会显示"暂无歌词"。
-  try {
-    final repo = await ref.watch(lyricsRepositoryProvider.future);
-    return await repo
-        .getLyrics(songId, artist, title)
-        .timeout(const Duration(seconds: 8));
-  } on TimeoutException {
+final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
+  final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
+  if (currentMediaItem == null) {
     return null;
   }
+
+  final songId =
+      (currentMediaItem.extras?['songId'] as String? ?? currentMediaItem.id)
+          .trim();
+  if (songId.isEmpty) {
+    return null;
+  }
+
+  return LyricsRequestSnapshot(
+    songId: songId,
+    artist: (currentMediaItem.artist ?? '').trim(),
+    title: currentMediaItem.title.trim(),
+  );
+});
+
+/// 使用同一条 mediaItem emission 里的 songId/artist/title 生成歌词请求快照。
+/// 这样可以避免 songId 与元信息来自不同时刻，导致歌词短暂显示后又回退到空白。
+final lyricsProvider =
+    FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((ref, request) async {
+  final repo = await ref.watch(lyricsRepositoryProvider.future);
+  return repo.getLyrics(request.songId, request.artist, request.title);
 });
 
 /// 控制歌词区域显示与隐藏。
