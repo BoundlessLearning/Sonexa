@@ -4,10 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
 
-// ── 主题模式 Provider（当前本地管理）──────────────────────────
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
-/// 设置页 — 服务器信息、外观、缓存、账号、关于
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -15,13 +13,13 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final serverAsync = ref.watch(activeServerProvider);
+    final errorColor = Theme.of(context).colorScheme.error;
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
         children: [
-          // ── 服务器信息 ──────────────────────────────────────
-          _SectionHeader(title: '服务器信息'),
+          const _SectionHeader(title: '服务器信息'),
           serverAsync.when(
             loading: () => const ListTile(
               leading: Icon(Icons.dns_outlined),
@@ -39,15 +37,14 @@ class SettingsPage extends ConsumerWidget {
                   title: Text('未连接服务器'),
                 );
               }
+
               return Column(
                 children: [
-                  // 服务器地址
                   ListTile(
                     leading: const Icon(Icons.dns_outlined),
                     title: const Text('服务器地址'),
                     subtitle: Text(server.baseUrl),
                   ),
-                  // 用户名
                   ListTile(
                     leading: const Icon(Icons.person_outline),
                     title: const Text('用户名'),
@@ -57,49 +54,61 @@ class SettingsPage extends ConsumerWidget {
               );
             },
           ),
-
           const Divider(),
-
-          // ── 外观设置 ──────────────────────────────────────
-          _SectionHeader(title: '外观'),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('主题模式'),
-            trailing: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(
-                  value: ThemeMode.system,
-                  label: Text('跟随系统'),
-                  icon: Icon(Icons.settings_suggest_outlined),
+          const _SectionHeader(title: '外观'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '主题模式',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<ThemeMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: ThemeMode.system,
+                            label: Text('跟随系统'),
+                            icon: Icon(Icons.settings_suggest_outlined),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.light,
+                            label: Text('浅色'),
+                            icon: Icon(Icons.light_mode_outlined),
+                          ),
+                          ButtonSegment(
+                            value: ThemeMode.dark,
+                            label: Text('深色'),
+                            icon: Icon(Icons.dark_mode_outlined),
+                          ),
+                        ],
+                        selected: {themeMode},
+                        onSelectionChanged: (selected) {
+                          ref.read(themeModeProvider.notifier).state =
+                              selected.first;
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-                ButtonSegment(
-                  value: ThemeMode.light,
-                  label: Text('浅色'),
-                  icon: Icon(Icons.light_mode_outlined),
-                ),
-                ButtonSegment(
-                  value: ThemeMode.dark,
-                  label: Text('深色'),
-                  icon: Icon(Icons.dark_mode_outlined),
-                ),
-              ],
-              selected: {themeMode},
-              onSelectionChanged: (selected) {
-                ref.read(themeModeProvider.notifier).state = selected.first;
-              },
+              ),
             ),
           ),
-
           const Divider(),
-
-          // ── 缓存管理 ──────────────────────────────────────
-          _SectionHeader(title: '缓存'),
+          const _SectionHeader(title: '缓存'),
           ListTile(
             leading: const Icon(Icons.cleaning_services_outlined),
             title: const Text('清除图片缓存'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // 清除内存中的图片缓存
               PaintingBinding.instance.imageCache.clear();
               PaintingBinding.instance.imageCache.clearLiveImages();
               if (context.mounted) {
@@ -115,19 +124,13 @@ class SettingsPage extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/downloads'),
           ),
-
           const Divider(),
-
-          // ── 账号 ──────────────────────────────────────────
-          _SectionHeader(title: '账号'),
+          const _SectionHeader(title: '账号'),
           ListTile(
-            leading: Icon(
-              Icons.logout,
-              color: Theme.of(context).colorScheme.error,
-            ),
+            leading: Icon(Icons.logout, color: errorColor),
             title: Text(
               '退出登录',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              style: TextStyle(color: errorColor),
             ),
             onTap: () async {
               await ref.read(authStateProvider.notifier).logout();
@@ -136,11 +139,8 @@ class SettingsPage extends ConsumerWidget {
               }
             },
           ),
-
           const Divider(),
-
-          // ── 关于 ──────────────────────────────────────────
-          _SectionHeader(title: '关于'),
+          const _SectionHeader(title: '关于'),
           const ListTile(
             leading: Icon(Icons.music_note),
             title: Text('OhMyMusic'),
@@ -151,8 +151,6 @@ class SettingsPage extends ConsumerWidget {
             title: Text('项目信息'),
             subtitle: Text('基于 Subsonic API 的开源音乐播放器'),
           ),
-
-          // 底部留白
           const SizedBox(height: 32),
         ],
       ),
@@ -160,7 +158,6 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-/// 区域标题组件
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title});
 

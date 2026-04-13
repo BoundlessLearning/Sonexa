@@ -14,7 +14,6 @@ import 'package:ohmymusic/core/audio/windows_media_controls.dart';
 import 'package:ohmymusic/core/database/app_database.dart';
 import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/image_cache_config.dart';
-import 'package:ohmymusic/features/auth/data/repositories/auth_repository.dart';
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
 
@@ -22,12 +21,10 @@ class _BootstrapData {
   const _BootstrapData({
     required this.database,
     required this.audioHandler,
-    required this.savedServer,
   });
 
   final AppDatabase database;
   final MusicAudioHandler audioHandler;
-  final dynamic savedServer;
 }
 
 Future<void> main() async {
@@ -109,8 +106,6 @@ class _BootstrapAppState extends State<_BootstrapApp> {
 
   Future<_BootstrapData> _bootstrap() async {
     final database = AppDatabase();
-    final authRepo = AuthRepository(database);
-    final savedServer = await authRepo.getActiveServer();
 
     final audioHandler = await AudioService.init(
       builder: () => MusicAudioHandler(),
@@ -134,7 +129,6 @@ class _BootstrapAppState extends State<_BootstrapApp> {
     return _BootstrapData(
       database: database,
       audioHandler: audioHandler,
-      savedServer: savedServer,
     );
   }
 
@@ -173,9 +167,6 @@ class _BootstrapAppState extends State<_BootstrapApp> {
           overrides: [
             databaseProvider.overrideWithValue(data.database),
             audioHandlerProvider.overrideWithValue(data.audioHandler),
-            activeServerProvider.overrideWith(
-              (_) => Future.value(data.savedServer),
-            ),
           ],
           child: const OhMyMusicApp(),
         );
