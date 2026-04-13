@@ -1,5 +1,4 @@
 import 'package:audio_service/audio_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +18,8 @@ class NowPlayingPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final audioHandler = ref.watch(audioHandlerProvider);
     final favorites = ref.watch(favoritesNotifierProvider);
+    final currentSong = ref.watch(currentSongProvider);
+    final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -32,10 +33,9 @@ class NowPlayingPage extends ConsumerWidget {
         title: const Text('正在播放'),
         centerTitle: true,
         actions: [
-          StreamBuilder<MediaItem?>(
-            stream: audioHandler.mediaItem,
-            builder: (context, snapshot) {
-              final songId = snapshot.data?.extras?['songId'] as String?;
+          Builder(
+            builder: (context) {
+              final songId = currentSong?.id;
               final isFavorite = songId != null && favorites.contains(songId);
 
               return IconButton(
@@ -73,24 +73,20 @@ class NowPlayingPage extends ConsumerWidget {
             },
           ),
           // 歌词搜索替换按钮
-          StreamBuilder<MediaItem?>(
-            stream: audioHandler.mediaItem,
-            builder: (context, snapshot) {
-              final item = snapshot.data;
+          Builder(
+            builder: (context) {
               return IconButton(
                 icon: const Icon(Icons.lyrics_rounded),
                 tooltip: '搜索歌词',
-                onPressed: item == null
+                onPressed: currentSong == null
                     ? null
                     : () {
-                        final songId =
-                            item.extras?['songId'] as String? ?? item.id;
                         context.push(Uri(
                           path: '/lyrics-search',
                           queryParameters: {
-                            'songId': songId,
-                            'artist': item.artist ?? '',
-                            'title': item.title,
+                            'songId': currentSong.id,
+                            'artist': currentSong.artist,
+                            'title': currentSong.title,
                           },
                         ).toString());
                       },
@@ -103,110 +99,98 @@ class NowPlayingPage extends ConsumerWidget {
           ),
         ],
       ),
-      body: StreamBuilder<MediaItem?>(
-        stream: audioHandler.mediaItem,
-        builder: (context, mediaSnapshot) {
-          final mediaItem = mediaSnapshot.data;
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Builder(
+          builder: (context) {
+            final showLyrics = ref.watch(showLyricsProvider);
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Builder(
-              builder: (context) {
-                final showLyrics = ref.watch(showLyricsProvider);
-
-                return Column(
-                  children: [
-                    if (showLyrics) ...[
-                      const SizedBox(height: 16),
-                      Expanded(
-                        flex: 5,
-                        child: Container(
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: const LyricsDisplay(),
-                          ),
-                        ),
+            return Column(
+              children: [
+                if (showLyrics) ...[
+                  const SizedBox(height: 16),
+                  Expanded(
+                    flex: 5,
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(height: 20),
-                    ] else ...[
-                      const Spacer(flex: 1),
-                      // 封面 / 歌词切换区域
-                      Container(
-                        width: 280,
-                        height: 280,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colorScheme.shadow.withValues(alpha: 0.2),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: const LyricsDisplay(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ] else ...[
+                  const Spacer(flex: 1),
+                  Container(
+                    width: 280,
+                    height: 280,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.shadow.withValues(alpha: 0.2),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
                         ),
-                        child: Hero(
-                          tag: 'now-playing-cover',
-                          child: mediaItem?.artUri != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Image.network(
-                                    mediaItem!.artUri.toString(),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(
-                                      Icons.album,
-                                      size: 200,
-                                    ),
-                                  ),
-                                )
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: const Icon(Icons.album, size: 200),
+                      ],
+                    ),
+                    child: Hero(
+                      tag: 'now-playing-cover',
+                      child: currentMediaItem?.artUri != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.network(
+                                currentMediaItem!.artUri.toString(),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.album,
+                                  size: 200,
                                 ),
-                        ),
-                      ),
-                      const Spacer(flex: 1),
-                    ],
-                    // Song title
-                    Text(
-                      mediaItem?.title ?? '未播放',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: const Icon(Icons.album, size: 200),
+                            ),
                     ),
-                    const SizedBox(height: 4),
-                    // Artist name
-                    Text(
-                      mediaItem?.artist ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    // Seek bar
-                    _SeekBar(audioHandler: audioHandler, mediaItem: mediaItem),
-                    const SizedBox(height: 16),
-                    // Playback controls
-                    _PlaybackControls(audioHandler: audioHandler),
-                    const Spacer(flex: 2),
-                  ],
-                );
-              },
-            ),
-          );
-        },
+                  ),
+                  const Spacer(flex: 1),
+                ],
+                Text(
+                  currentSong?.title ?? '未播放',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  currentSong?.artist ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                _SeekBar(audioHandler: audioHandler, mediaItem: currentMediaItem),
+                const SizedBox(height: 16),
+                _PlaybackControls(audioHandler: audioHandler),
+                const Spacer(flex: 2),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

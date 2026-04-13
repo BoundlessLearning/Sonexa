@@ -22,6 +22,7 @@ extension SongToMediaItem on Song {
         'albumId': albumId,
         'artistId': artistId,
         'isLocal': localFilePath != null && localFilePath!.isNotEmpty,
+        'fallbackFormat': 'raw',
       },
     );
   }

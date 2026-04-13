@@ -12,6 +12,7 @@ class QueuePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final audioHandler = ref.watch(audioHandlerProvider);
+    final currentSong = ref.watch(currentSongProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
@@ -47,128 +48,119 @@ class QueuePage extends ConsumerWidget {
             );
           }
 
-          return StreamBuilder<MediaItem?>(
-            stream: audioHandler.mediaItem,
-            builder: (context, mediaSnapshot) {
-              final currentItem = mediaSnapshot.data;
+          return ReorderableListView.builder(
+            padding: const EdgeInsets.only(bottom: 80),
+            itemCount: queue.length,
+            onReorder: (oldIndex, newIndex) {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
 
-              return ReorderableListView.builder(
-                padding: const EdgeInsets.only(bottom: 80),
-                itemCount: queue.length,
-                onReorder: (oldIndex, newIndex) {
-                  // ReorderableListView 向下拖动时需要手动修正索引。
-                  if (oldIndex < newIndex) {
-                    newIndex -= 1;
-                  }
+              DiagnosticLogger.instance.log(
+                '[OP] queue_reorder: oldIndex=$oldIndex, newIndex=$newIndex',
+              );
+              audioHandler.moveQueueItem(oldIndex, newIndex);
+            },
+            itemBuilder: (context, index) {
+              final item = queue[index];
+              final itemSongId = item.extras?['songId'] as String? ?? item.id;
+              final isCurrent = currentSong?.id == itemSongId;
 
-                   DiagnosticLogger.instance.log(
-                     '[OP] queue_reorder: oldIndex=$oldIndex, newIndex=$newIndex',
-                   );
-
-                   audioHandler.moveQueueItem(oldIndex, newIndex);
+              return Dismissible(
+                key: ValueKey('${item.id}_$index'),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 24),
+                  color: colorScheme.errorContainer,
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: colorScheme.onErrorContainer,
+                  ),
+                ),
+                onDismissed: (_) {
+                  DiagnosticLogger.instance.log(
+                    '[OP] queue_remove: index=$index, title=${item.title}',
+                  );
+                  audioHandler.removeFromQueue(index);
                 },
-                itemBuilder: (context, index) {
-                  final item = queue[index];
-                  final isCurrent = currentItem?.id == item.id &&
-                      currentItem?.title == item.title;
-
-                  return Dismissible(
-                    key: ValueKey('${item.id}_$index'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 24),
-                      color: colorScheme.errorContainer,
-                      child: Icon(
-                        Icons.delete_outline_rounded,
-                        color: colorScheme.onErrorContainer,
-                      ),
-                    ),
-                    onDismissed: (_) {
-                      DiagnosticLogger.instance.log(
-                        '[OP] queue_remove: index=$index, title=${item.title}',
-                      );
-                      audioHandler.removeFromQueue(index);
-                    },
-                    child: ListTile(
-                      key: ValueKey('tile_${item.id}_$index'),
-                      onTap: () {
-                        DiagnosticLogger.instance.log(
-                          '[OP] queue_tap: index=$index, title=${item.title}',
-                        );
-                        audioHandler.skipToQueueItem(index);
-                      },
-                      leading: isCurrent
-                          ? Icon(
-                              Icons.equalizer_rounded,
-                              color: colorScheme.primary,
-                            )
-                          : Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: item.artUri != null
-                                  ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        item.artUri.toString(),
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => Icon(
-                                          Icons.music_note,
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    )
-                                  : Icon(
+                child: ListTile(
+                  key: ValueKey('tile_${item.id}_$index'),
+                  onTap: () {
+                    DiagnosticLogger.instance.log(
+                      '[OP] queue_tap: index=$index, title=${item.title}',
+                    );
+                    audioHandler.skipToQueueItem(index);
+                  },
+                  leading: isCurrent
+                      ? Icon(
+                          Icons.equalizer_rounded,
+                          color: colorScheme.primary,
+                        )
+                      : Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: item.artUri != null
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    item.artUri.toString(),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Icon(
                                       Icons.music_note,
                                       color: colorScheme.onSurfaceVariant,
                                     ),
-                            ),
-                      title: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodyLarge?.copyWith(
-                          color: isCurrent ? colorScheme.primary : null,
-                          fontWeight: isCurrent ? FontWeight.w600 : null,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.music_note,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                         ),
-                      ),
-                      subtitle: Text(
-                        item.artist ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: isCurrent
-                              ? colorScheme.primary.withValues(alpha: 0.7)
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (item.duration != null)
-                            Text(
-                              formatDuration(item.duration!.inSeconds),
-                              style: textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          const SizedBox(width: 8),
-                          ReorderableDragStartListener(
-                            index: index,
-                            child: Icon(
-                              Icons.drag_handle_rounded,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
+                  title: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: isCurrent ? colorScheme.primary : null,
+                      fontWeight: isCurrent ? FontWeight.w600 : null,
                     ),
-                  );
-                },
+                  ),
+                  subtitle: Text(
+                    item.artist ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: isCurrent
+                          ? colorScheme.primary.withValues(alpha: 0.7)
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (item.duration != null)
+                        Text(
+                          formatDuration(item.duration!.inSeconds),
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: Icon(
+                          Icons.drag_handle_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           );
