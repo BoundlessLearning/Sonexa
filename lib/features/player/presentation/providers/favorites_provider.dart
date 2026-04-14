@@ -1,9 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:ohmymusic/features/home/presentation/providers/home_provider.dart';
+import 'package:ohmymusic/features/library/domain/entities/song.dart';
 import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
 
 final favoritesNotifierProvider =
     StateNotifierProvider<FavoritesNotifier, Set<String>>((ref) {
-      return FavoritesNotifier(ref);
+      final notifier = FavoritesNotifier(ref);
+
+      ref.listen<AsyncValue<List<Song>>>(starredSongsProvider, (_, next) {
+        next.whenData(notifier.replaceWithServerSongs);
+      });
+
+      final initialFavorites = ref.watch(starredSongsProvider).valueOrNull;
+      if (initialFavorites != null) {
+        notifier.replaceWithServerSongs(initialFavorites);
+      }
+
+      return notifier;
     });
 
 class FavoritesNotifier extends StateNotifier<Set<String>> {
@@ -13,12 +27,15 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
 
   bool isFavorite(String songId) => state.contains(songId);
 
+  void replaceWithServerSongs(List<Song> songs) {
+    state = songs.map((song) => song.id).toSet();
+  }
+
   Future<void> toggleFavorite(String songId) async {
     final previousState = state;
     final isCurrentlyFavorite = previousState.contains(songId);
-
-    // 先乐观更新 UI，失败时再回滚，保证交互更流畅。
     final nextState = Set<String>.from(previousState);
+
     if (isCurrentlyFavorite) {
       nextState.remove(songId);
     } else {
@@ -33,6 +50,7 @@ class FavoritesNotifier extends StateNotifier<Set<String>> {
       } else {
         await api.star(songId: songId);
       }
+      _ref.invalidate(starredSongsProvider);
     } catch (_) {
       state = previousState;
       rethrow;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:ohmymusic/features/library/presentation/pages/albums_tab.dart';
 import 'package:ohmymusic/features/library/presentation/pages/artists_tab.dart';
 import 'package:ohmymusic/features/library/presentation/pages/playlists_tab.dart';
@@ -22,12 +23,21 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           title: const Text('音乐库'),
           bottom: const TabBar(
             tabs: [
-              Tab(text: '歌曲'),
-              Tab(text: '专辑'),
-              Tab(text: '艺术家'),
+              Tab(
+                text: '歌曲',
+                icon: Icon(Icons.music_note_rounded),
+              ),
+              Tab(
+                text: '专辑',
+                icon: Icon(Icons.album_rounded),
+              ),
+              Tab(
+                text: '艺术家',
+                icon: Icon(Icons.person_rounded),
+              ),
               Tab(
                 text: '播放列表',
-                icon: Icon(Icons.queue_music),
+                icon: Icon(Icons.queue_music_rounded),
               ),
             ],
           ),
