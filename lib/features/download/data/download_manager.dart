@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:ohmymusic/core/database/app_database.dart';
 import 'package:ohmymusic/core/network/subsonic_api_client.dart';
+import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
 import 'package:ohmymusic/features/download/data/download_dao.dart';
 import 'package:ohmymusic/features/download/domain/entities/download_task.dart';
 import 'package:ohmymusic/features/library/domain/entities/song.dart';
@@ -22,6 +23,7 @@ class DownloadManager {
       _latestDownloads = downloads;
       _scheduleEmit();
     });
+    unawaited(_repairDownloadIntegrity());
   }
 
   static const int _maxConcurrentDownloads = 3;
@@ -53,10 +55,20 @@ class DownloadManager {
 
     final existingDownload = await _dao.getDownloadBySongId(song.id);
     if (existingDownload != null) {
-      if (existingDownload.status == DownloadStatus.completed.name &&
-          existingDownload.localPath.isNotEmpty &&
-          await File(existingDownload.localPath).exists()) {
-        return;
+      if (existingDownload.status == DownloadStatus.completed.name) {
+        final isValid = await _isPersistedDownloadValid(
+          download: existingDownload,
+          song: song,
+        );
+        if (isValid) {
+          return;
+        }
+
+        await _markDownloadFailed(
+          existingDownload.id,
+          song.id,
+          'Downloaded file is missing or invalid.',
+        );
       }
 
       if (existingDownload.status == DownloadStatus.pending.name ||
@@ -258,9 +270,9 @@ class DownloadManager {
     _scheduleEmit();
 
     final downloadDirectoryPath = await _resolveDownloadDirectory();
-    final filePath = p.join(
-      downloadDirectoryPath,
-      '${song.id}_${_sanitizeFileName(song.title)}.${_resolveFileSuffix(song.suffix)}',
+    final filePath = await _buildDownloadFilePath(
+      directoryPath: downloadDirectoryPath,
+      song: song,
     );
 
     try {
@@ -286,8 +298,10 @@ class DownloadManager {
         },
       );
 
-      final file = File(filePath);
-      final fileSize = await file.length();
+      final fileSize = await _validateDownloadedFile(
+        song: song,
+        filePath: filePath,
+      );
       final completedAt = DateTime.now();
 
       await _db.transaction(() async {
@@ -361,6 +375,30 @@ class DownloadManager {
     _scheduleEmit();
   }
 
+  Future<void> _repairDownloadIntegrity() async {
+    final downloads = await _dao.getAllDownloads();
+    for (final download in downloads) {
+      if (download.status != DownloadStatus.completed.name) {
+        continue;
+      }
+
+      final song = await _getSongById(download.songId);
+      final isValid = await _isPersistedDownloadValid(
+        download: download,
+        song: song,
+      );
+      if (isValid) {
+        continue;
+      }
+
+      await _markDownloadFailed(
+        download.id,
+        download.songId,
+        'Downloaded file is missing or invalid.',
+      );
+    }
+  }
+
   Future<Song?> _getSongById(String songId) async {
     final cachedSong = _songCache[songId];
     if (cachedSong != null) {
@@ -369,33 +407,104 @@ class DownloadManager {
 
     final row = await (_db.select(_db.cachedSongs)..where((tbl) => tbl.id.equals(songId)))
         .getSingleOrNull();
-    if (row == null) {
-      return null;
+    if (row != null) {
+      final song = Song(
+        id: row.id,
+        title: row.title,
+        artist: row.artist,
+        artistId: row.artistId,
+        album: row.album,
+        albumId: row.albumId,
+        coverArtId: row.coverArtId,
+        duration: row.duration,
+        track: row.track,
+        discNumber: row.discNumber,
+        year: row.year,
+        genre: row.genre,
+        bitRate: row.bitRate,
+        suffix: row.suffix,
+        size: row.size,
+        playCount: row.playCount,
+        starred: row.starred,
+        lastPlayed: row.lastPlayed,
+        localFilePath: row.localFilePath,
+      );
+      _songCache[songId] = song;
+      return song;
     }
 
-    final song = Song(
-      id: row.id,
-      title: row.title,
-      artist: row.artist,
-      artistId: row.artistId,
-      album: row.album,
-      albumId: row.albumId,
-      coverArtId: row.coverArtId,
-      duration: row.duration,
-      track: row.track,
-      discNumber: row.discNumber,
-      year: row.year,
-      genre: row.genre,
-      bitRate: row.bitRate,
-      suffix: row.suffix,
-      size: row.size,
-      playCount: row.playCount,
-      starred: row.starred,
-      lastPlayed: row.lastPlayed,
-      localFilePath: row.localFilePath,
+    final remoteSong = await _fetchSongById(songId);
+    if (remoteSong != null) {
+      _songCache[songId] = remoteSong;
+    }
+    return remoteSong;
+  }
+
+  Future<Song?> _fetchSongById(String songId) async {
+    try {
+      final response = await _apiClient.getSong(songId);
+      final songJson = response.subsonicResponseBody?['song'];
+      if (songJson is! Map) {
+        return null;
+      }
+
+      final song = _parseSongJson(songJson.cast<String, dynamic>());
+      await _db.into(_db.cachedSongs).insertOnConflictUpdate(
+        CachedSongsCompanion.insert(
+          id: song.id,
+          title: song.title,
+          artist: song.artist,
+          artistId: song.artistId,
+          album: song.album,
+          albumId: song.albumId,
+          coverArtId: Value(song.coverArtId),
+          duration: song.duration,
+          track: Value(song.track),
+          discNumber: Value(song.discNumber),
+          year: Value(song.year),
+          genre: Value(song.genre),
+          bitRate: Value(song.bitRate),
+          suffix: Value(song.suffix),
+          size: Value(song.size),
+          playCount: Value(song.playCount),
+          starred: Value(song.starred),
+          lastPlayed: Value(song.lastPlayed),
+          localFilePath: Value(song.localFilePath),
+          cachedAt: DateTime.now(),
+        ),
+      );
+      return song;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Song _parseSongJson(Map<String, dynamic> json) {
+    return Song(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? '',
+      artist: json['artist'] as String? ?? 'Unknown',
+      artistId: json['artistId'] as String? ?? '',
+      album: json['album'] as String? ?? '',
+      albumId: json['albumId'] as String? ?? '',
+      coverArtId: json['coverArt'] as String?,
+      duration: json['duration'] as int? ?? 0,
+      track: json['track'] as int?,
+      discNumber: json['discNumber'] as int?,
+      year: json['year'] as int?,
+      genre: json['genre'] as String?,
+      bitRate: json['bitRate'] as int?,
+      suffix: json['suffix'] as String?,
+      size: json['size'] as int?,
+      playCount: json['playCount'] as int? ?? 0,
+      starred: json['starred'] != null
+          ? DateTime.tryParse(json['starred'] as String)
+          : null,
+      lastPlayed: json['played'] != null
+          ? DateTime.tryParse(json['played'] as String)
+          : null,
+      localFilePath: null,
     );
-    _songCache[songId] = song;
-    return song;
   }
 
   Future<void> _clearSongLocalPath(String songId) async {
@@ -422,6 +531,49 @@ class DownloadManager {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  Future<bool> _isPersistedDownloadValid({
+    required Download download,
+    Song? song,
+  }) async {
+    if (download.localPath.isEmpty) {
+      return false;
+    }
+
+    try {
+      final fileSize = await _validateDownloadedFile(
+        song: song,
+        filePath: download.localPath,
+        fallbackExpectedSize: download.fileSize,
+      );
+      return fileSize > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<int> _validateDownloadedFile({
+    required String filePath,
+    Song? song,
+    int? fallbackExpectedSize,
+  }) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw const FileSystemException('Downloaded file does not exist.');
+    }
+
+    final fileSize = await file.length();
+    if (fileSize <= 0) {
+      throw const FileSystemException('Downloaded file is empty.');
+    }
+
+    final expectedSize = song?.size ?? fallbackExpectedSize;
+    if (expectedSize != null && expectedSize > 0 && fileSize != expectedSize) {
+      throw FileSystemException('Downloaded file size mismatch.', filePath);
+    }
+
+    return fileSize;
   }
 
   void _scheduleEmit() {
@@ -482,6 +634,30 @@ class DownloadManager {
   String _resolveFileSuffix(String? suffix) {
     final normalized = suffix?.trim().replaceFirst('.', '');
     return (normalized == null || normalized.isEmpty) ? 'mp3' : normalized;
+  }
+
+  Future<String> _buildDownloadFilePath({
+    required String directoryPath,
+    required Song song,
+  }) async {
+    final extension = _resolveFileSuffix(song.suffix);
+    final title = _sanitizeFileName(song.title);
+    final artist = _sanitizeFileName(song.artist);
+    final baseName = artist.isEmpty || artist == 'Unknown'
+        ? title
+        : '$title - $artist';
+
+    var candidateName = '$baseName.$extension';
+    var candidatePath = p.join(directoryPath, candidateName);
+    var duplicateIndex = 2;
+
+    while (await File(candidatePath).exists()) {
+      candidateName = '$baseName ($duplicateIndex).$extension';
+      candidatePath = p.join(directoryPath, candidateName);
+      duplicateIndex += 1;
+    }
+
+    return candidatePath;
   }
 }
 
