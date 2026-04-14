@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/core/audio/media_item_converter.dart';
-import 'package:ohmymusic/features/home/presentation/providers/home_provider.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/song_list_tile.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 /// 通用歌曲列表页面，根据传入的 provider 和标题显示完整歌曲列表。
 /// 用于首页各分区的「查看更多」跳转。

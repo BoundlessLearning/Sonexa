@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/download/presentation/providers/download_provider.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
@@ -194,13 +195,14 @@ class SettingsPage extends ConsumerWidget {
           const _SectionHeader(title: '关于'),
           const ListTile(
             leading: Icon(Icons.music_note),
-            title: Text('OhMyMusic'),
-            subtitle: Text('版本 1.0.0-dev'),
+            title: Text(AppBranding.name),
+            subtitle: Text('${AppBranding.slogan}\n版本 1.0.0-dev'),
+            isThreeLine: true,
           ),
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('项目信息'),
-            subtitle: Text('基于 Subsonic API 的开源音乐播放器'),
+            subtitle: Text(AppBranding.positioning),
           ),
           const SizedBox(height: 32),
         ],

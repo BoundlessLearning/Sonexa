@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
-import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/features/library/domain/entities/playlist.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 final playlistsProvider = FutureProvider<List<Playlist>>((ref) async {
   final api = await ref.watch(subsonicApiClientProvider.future);

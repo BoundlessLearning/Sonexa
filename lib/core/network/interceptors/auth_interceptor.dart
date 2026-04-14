@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
+import 'package:sonexa/core/constants/app_branding.dart';
+
 class SubsonicAuthInterceptor extends Interceptor {
   SubsonicAuthInterceptor({
     required String baseUrl,
@@ -55,7 +57,7 @@ class SubsonicAuthInterceptor extends Interceptor {
       't': token,
       's': salt,
       'v': '1.16.1',
-      'c': 'OhMyMusic',
+      'c': AppBranding.clientId,
       'f': 'json',
     };
   }

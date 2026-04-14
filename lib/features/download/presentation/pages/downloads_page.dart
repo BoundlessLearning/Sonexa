@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/features/download/domain/entities/download_task.dart';
-import 'package:ohmymusic/features/download/presentation/providers/download_provider.dart';
+import 'package:sonexa/features/download/domain/entities/download_task.dart';
+import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 
 /// 下载管理页 — 展示所有下载任务，支持取消、重试、删除操作
 class DownloadsPage extends ConsumerWidget {

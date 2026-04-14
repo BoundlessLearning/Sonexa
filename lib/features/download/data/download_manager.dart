@@ -9,12 +9,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/network/subsonic_api_client.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
-import 'package:ohmymusic/features/download/data/download_dao.dart';
-import 'package:ohmymusic/features/download/domain/entities/download_task.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/features/download/data/download_dao.dart';
+import 'package:sonexa/features/download/domain/entities/download_task.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
 
 class DownloadManager {
   DownloadManager(this._apiClient, this._db, this._baseDownloadDirectory)

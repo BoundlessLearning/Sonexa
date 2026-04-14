@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/playlist_provider.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/playlist_provider.dart';
 
 class PlaylistsTab extends ConsumerWidget {
   const PlaylistsTab({super.key});

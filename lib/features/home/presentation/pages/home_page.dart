@@ -3,14 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'package:ohmymusic/core/audio/media_item_converter.dart';
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/home/presentation/providers/home_provider.dart';
-import 'package:ohmymusic/features/library/domain/entities/album.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/player/presentation/providers/play_history_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
+import 'package:sonexa/features/library/domain/entities/album.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/player/presentation/providers/play_history_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});

@@ -1,10 +1,10 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/network/dio_client.dart';
-import 'package:ohmymusic/core/network/subsonic_api_client.dart';
-import 'package:ohmymusic/features/auth/domain/entities/server_config.dart'
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/network/dio_client.dart';
+import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/features/auth/domain/entities/server_config.dart'
     as entity;
 
 class AuthRepository {

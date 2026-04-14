@@ -4,10 +4,11 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:ohmymusic/core/error/exceptions.dart';
-import 'package:ohmymusic/core/network/interceptors/auth_interceptor.dart';
-import 'package:ohmymusic/core/network/interceptors/retry_interceptor.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/core/error/exceptions.dart';
+import 'package:sonexa/core/network/interceptors/auth_interceptor.dart';
+import 'package:sonexa/core/network/interceptors/retry_interceptor.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
 
 class SubsonicApiClient {
   SubsonicApiClient(
@@ -408,7 +409,7 @@ class SubsonicApiClient {
       't': token,
       's': salt,
       'v': '1.16.1',
-      'c': 'OhMyMusic',
+      'c': AppBranding.clientId,
       'f': 'json',
     };
   }

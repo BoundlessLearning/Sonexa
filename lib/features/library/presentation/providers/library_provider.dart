@@ -1,14 +1,14 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/core/network/dio_client.dart';
-import 'package:ohmymusic/core/network/subsonic_api_client.dart';
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
-import 'package:ohmymusic/features/library/data/repositories/library_repository.dart';
-import 'package:ohmymusic/features/library/domain/entities/album.dart';
-import 'package:ohmymusic/features/library/domain/entities/artist.dart';
-import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
+import 'package:sonexa/core/network/dio_client.dart';
+import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/features/library/data/repositories/library_repository.dart';
+import 'package:sonexa/features/library/domain/entities/album.dart';
+import 'package:sonexa/features/library/domain/entities/artist.dart';
+import 'package:sonexa/features/library/domain/entities/playlist.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
 
 /// SubsonicApiClient 依赖活跃服务器配置，等待其加载完成后创建。
 final subsonicApiClientProvider = FutureProvider<SubsonicApiClient>((ref) async {

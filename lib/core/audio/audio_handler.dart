@@ -5,7 +5,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 
 export 'package:audio_service/audio_service.dart' show AudioServiceRepeatMode;
 

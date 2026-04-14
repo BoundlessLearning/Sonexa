@@ -1,8 +1,8 @@
-import 'package:ohmymusic/core/network/subsonic_api_client.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
-import 'package:ohmymusic/features/library/domain/entities/album.dart';
-import 'package:ohmymusic/features/library/domain/entities/artist.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
+import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/features/library/domain/entities/album.dart';
+import 'package:sonexa/features/library/domain/entities/artist.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
 
 class SearchResult {
   final List<Song> songs;

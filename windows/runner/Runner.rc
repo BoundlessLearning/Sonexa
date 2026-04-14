@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.ohmymusic" "\0"
-            VALUE "FileDescription", "ohmymusic" "\0"
+            VALUE "CompanyName", "Sonexa" "\0"
+            VALUE "FileDescription", "Sonexa" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ohmymusic" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.ohmymusic. All rights reserved." "\0"
-            VALUE "OriginalFilename", "ohmymusic.exe" "\0"
-            VALUE "ProductName", "ohmymusic" "\0"
+            VALUE "InternalName", "Sonexa" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Sonexa. All rights reserved." "\0"
+            VALUE "OriginalFilename", "sonexa.exe" "\0"
+            VALUE "ProductName", "Sonexa" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

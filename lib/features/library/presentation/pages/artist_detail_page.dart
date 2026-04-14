@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'package:ohmymusic/core/audio/media_item_converter.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/album_grid_tile.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/song_list_tile.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/widgets/album_grid_tile.dart';
+import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 /// 艺术家详情页 — 展示艺术家封面、热门歌曲、专辑列表
 class ArtistDetailPage extends ConsumerStatefulWidget {

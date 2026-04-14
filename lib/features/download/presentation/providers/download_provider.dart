@@ -5,11 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/download/data/download_dao.dart';
-import 'package:ohmymusic/features/download/data/download_manager.dart';
-import 'package:ohmymusic/features/download/domain/entities/download_task.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/download/data/download_dao.dart';
+import 'package:sonexa/features/download/data/download_manager.dart';
+import 'package:sonexa/features/download/domain/entities/download_task.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 class DownloadDirectoryInfo {
   const DownloadDirectoryInfo({
@@ -108,14 +109,17 @@ Future<String?> _resolvePublicDownloadDirectory() async {
       if (downloadsDirectory == null) {
         return null;
       }
-      final path = p.join(downloadsDirectory.path, 'OhMyMusic');
+      final path = p.join(
+        downloadsDirectory.path,
+        AppBranding.downloadFolderName,
+      );
       return await _ensureDirectoryWritable(path) ? path : null;
     }
 
     if (Platform.isAndroid) {
       const candidates = <String>[
-        '/storage/emulated/0/Download/OhMyMusic',
-        '/sdcard/Download/OhMyMusic',
+        '/storage/emulated/0/Download/${AppBranding.downloadFolderName}',
+        '/sdcard/Download/${AppBranding.downloadFolderName}',
       ];
 
       for (final candidate in candidates) {
@@ -137,7 +141,7 @@ Future<bool> _ensureDirectoryWritable(String path) async {
     await directory.create(recursive: true);
 
     final probeFile = File(
-      p.join(directory.path, '.ohmymusic_write_test'),
+      p.join(directory.path, '.sonexa_write_test'),
     );
     await probeFile.writeAsString('ok', flush: true);
     if (await probeFile.exists()) {

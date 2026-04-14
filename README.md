@@ -1,16 +1,15 @@
-# ohmymusic
+# Sonexa
 
-A new Flutter project.
+**Your music. Anywhere.**
 
-## Getting Started
+Sonexa is a music player designed for people who host their own music.
+Connect to your servers, stream your collection, and stay in control.
 
-This project is a starting point for a Flutter application.
+Sonexa does not try to replace your music sources. It connects them.
 
-A few resources to get you started if this is your first Flutter project:
+## Highlights
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Works with self-hosted music servers.
+- Starts with Navidrome support, with room for more server backends later.
+- No built-in streaming catalog or locked ecosystem.
+- Your music, your server, your control.

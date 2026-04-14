@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:ohmymusic/features/lyrics/domain/entities/lyrics.dart';
-import 'package:ohmymusic/features/lyrics/presentation/providers/lyrics_provider.dart';
+import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
+import 'package:sonexa/features/lyrics/presentation/providers/lyrics_provider.dart';
 
 /// 歌词联网搜索页面。
 /// 接收 songId、artist、title 参数，搜索 lrclib 并展示候选歌词供用户选择替换。

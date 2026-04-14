@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/auth/presentation/widgets/server_form.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/auth/presentation/widgets/server_form.dart';
 
 class LoginPage extends ConsumerWidget {
   const LoginPage({super.key});
@@ -35,7 +36,7 @@ class LoginPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'OhMyMusic',
+                  AppBranding.name,
                   style: theme.textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.onSurface,
@@ -43,7 +44,7 @@ class LoginPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '连接您的 Navidrome 音乐库',
+                  AppBranding.positioning,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

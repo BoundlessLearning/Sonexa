@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/core/utils/formatters.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/song_context_menu.dart';
+import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/widgets/song_context_menu.dart';
 
 class SongListTile extends ConsumerWidget {
   const SongListTile({

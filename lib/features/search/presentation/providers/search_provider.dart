@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/features/library/data/repositories/library_repository.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/data/repositories/library_repository.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 final searchQueryProvider = StateProvider<String>((ref) => '');
 

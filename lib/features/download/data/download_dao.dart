@@ -1,5 +1,5 @@
 import 'package:drift/drift.dart';
-import 'package:ohmymusic/core/database/app_database.dart';
+import 'package:sonexa/core/database/app_database.dart';
 
 class DownloadDao {
   DownloadDao(this._db);

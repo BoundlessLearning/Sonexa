@@ -1,4 +1,4 @@
-package com.ohmymusic.ohmymusic
+package app.sonexa
 
 import com.ryanheise.audioservice.AudioServiceActivity
 

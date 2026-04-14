@@ -4,11 +4,11 @@ import 'package:audio_service/audio_service.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/core/audio/audio_handler.dart';
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/audio_handler.dart';
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
   late final AppDatabase _database;

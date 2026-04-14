@@ -2,25 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:ohmymusic/core/theme/page_transitions.dart';
-import 'package:ohmymusic/features/auth/presentation/pages/login_page.dart';
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/download/presentation/pages/downloads_page.dart';
-import 'package:ohmymusic/features/home/presentation/pages/home_page.dart';
-import 'package:ohmymusic/features/home/presentation/pages/song_list_page.dart';
-import 'package:ohmymusic/features/home/presentation/providers/home_provider.dart';
-import 'package:ohmymusic/features/library/presentation/pages/album_detail_page.dart';
-import 'package:ohmymusic/features/library/presentation/pages/artist_detail_page.dart';
-import 'package:ohmymusic/features/library/presentation/pages/filtered_song_list_page.dart';
-import 'package:ohmymusic/features/library/presentation/pages/library_page.dart';
-import 'package:ohmymusic/features/library/presentation/pages/playlist_detail_page.dart';
-import 'package:ohmymusic/features/lyrics/presentation/pages/lyrics_search_page.dart';
-import 'package:ohmymusic/features/player/presentation/pages/now_playing_page.dart';
-import 'package:ohmymusic/features/player/presentation/pages/play_history_page.dart';
-import 'package:ohmymusic/features/player/presentation/pages/queue_page.dart';
-import 'package:ohmymusic/features/player/presentation/widgets/mini_player.dart';
-import 'package:ohmymusic/features/search/presentation/pages/search_page.dart';
-import 'package:ohmymusic/features/settings/presentation/pages/settings_page.dart';
+import 'package:sonexa/core/theme/page_transitions.dart';
+import 'package:sonexa/features/auth/presentation/pages/login_page.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/download/presentation/pages/downloads_page.dart';
+import 'package:sonexa/features/home/presentation/pages/home_page.dart';
+import 'package:sonexa/features/home/presentation/pages/song_list_page.dart';
+import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
+import 'package:sonexa/features/library/presentation/pages/album_detail_page.dart';
+import 'package:sonexa/features/library/presentation/pages/artist_detail_page.dart';
+import 'package:sonexa/features/library/presentation/pages/filtered_song_list_page.dart';
+import 'package:sonexa/features/library/presentation/pages/library_page.dart';
+import 'package:sonexa/features/library/presentation/pages/playlist_detail_page.dart';
+import 'package:sonexa/features/lyrics/presentation/pages/lyrics_search_page.dart';
+import 'package:sonexa/features/player/presentation/pages/now_playing_page.dart';
+import 'package:sonexa/features/player/presentation/pages/play_history_page.dart';
+import 'package:sonexa/features/player/presentation/pages/queue_page.dart';
+import 'package:sonexa/features/player/presentation/widgets/mini_player.dart';
+import 'package:sonexa/features/search/presentation/pages/search_page.dart';
+import 'package:sonexa/features/settings/presentation/pages/settings_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // watch activeServerProvider 以确保登录/登出时路由自动刷新

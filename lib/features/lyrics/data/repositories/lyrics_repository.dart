@@ -3,11 +3,11 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/network/subsonic_api_client.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/features/lyrics/data/lrc_parser.dart';
-import 'package:ohmymusic/features/lyrics/domain/entities/lyrics.dart';
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/features/lyrics/data/lrc_parser.dart';
+import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
 
 class LyricsRepository {
   LyricsRepository(this._api, this._dio, this._database);

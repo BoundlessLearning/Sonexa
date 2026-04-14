@@ -5,8 +5,8 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:smtc_windows/smtc_windows.dart';
 
-import 'package:ohmymusic/core/audio/audio_handler.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/audio/audio_handler.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 
 /// Windows 系统媒体控制（SMTC）桥接。
 ///

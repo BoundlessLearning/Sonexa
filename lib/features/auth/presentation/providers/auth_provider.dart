@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/error/exceptions.dart';
-import 'package:ohmymusic/features/auth/data/repositories/auth_repository.dart';
-import 'package:ohmymusic/features/auth/domain/entities/server_config.dart' as entity;
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/error/exceptions.dart';
+import 'package:sonexa/features/auth/data/repositories/auth_repository.dart';
+import 'package:sonexa/features/auth/domain/entities/server_config.dart' as entity;
 
 final databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
 

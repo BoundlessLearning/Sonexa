@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/features/player/presentation/providers/play_history_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/play_history_provider.dart';
 
 class PlayHistoryPage extends ConsumerWidget {
   const PlayHistoryPage({super.key});

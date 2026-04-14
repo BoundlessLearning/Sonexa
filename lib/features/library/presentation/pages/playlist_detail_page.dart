@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'package:ohmymusic/core/audio/media_item_converter.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/core/utils/formatters.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/playlist_provider.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/song_list_tile.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/playlist_provider.dart';
+import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 /// 播放列表详情页 — 展示播放列表封面、元数据、歌曲列表
 class PlaylistDetailPage extends ConsumerWidget {

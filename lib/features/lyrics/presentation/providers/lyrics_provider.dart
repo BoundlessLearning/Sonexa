@@ -1,11 +1,12 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/core/database/daos/settings_dao.dart';
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/lyrics/data/repositories/lyrics_repository.dart';
-import 'package:ohmymusic/features/lyrics/domain/entities/lyrics.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/core/database/daos/settings_dao.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/lyrics/data/repositories/lyrics_repository.dart';
+import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class LyricsRequestSnapshot {
   const LyricsRequestSnapshot({
@@ -30,12 +31,12 @@ class LyricsRequestSnapshot {
   int get hashCode => Object.hash(songId, artist, title);
 }
 
-/// 为歌词仓库创建独立的 lrclib 客户端，避免复用 Subsonic 配置。
+/// Creates a dedicated LRCLIB client instead of reusing Subsonic settings.
 final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
   final dio = Dio(
     BaseOptions(
       baseUrl: 'https://lrclib.net/api',
-      headers: const {'Lrclib-UserAgent': 'OhMyMusic/1.0'},
+      headers: const {'Lrclib-UserAgent': AppBranding.userAgent},
     ),
   );
   ref.onDispose(() => dio.close(force: true));
@@ -67,8 +68,7 @@ final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
   );
 });
 
-/// 使用同一条 mediaItem emission 里的 songId/artist/title 生成歌词请求快照。
-/// 这样可以避免 songId 与元信息来自不同时刻，导致歌词短暂显示后又回退到空白。
+/// Uses a single media item snapshot to keep song id and metadata in sync.
 final lyricsProvider = FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((
   ref,
   request,
@@ -77,11 +77,11 @@ final lyricsProvider = FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((
   return repo.getLyrics(request.songId, request.artist, request.title);
 });
 
-/// 控制歌词区域显示与隐藏。
+/// Controls whether the lyrics panel is visible.
 final showLyricsProvider = StateProvider<bool>((ref) => true);
 
-/// 联网搜索歌词候选列表（lrclib）。
-/// 参数格式: "songId|artist|title"
+/// Searches LRCLIB candidates.
+/// Query format: "songId|artist|title".
 final lyricsSearchProvider = FutureProvider.family<List<Lyrics>, String>((
   ref,
   query,
@@ -90,7 +90,7 @@ final lyricsSearchProvider = FutureProvider.family<List<Lyrics>, String>((
   if (parts.length < 3) return [];
   final songId = parts[0];
   final artist = parts[1];
-  final title = parts.sublist(2).join('|'); // title 中可能包含 |
+  final title = parts.sublist(2).join('|');
   final repo = await ref.watch(lyricsRepositoryProvider.future);
 
   return repo.searchLrclib(songId: songId, artist: artist, title: title);

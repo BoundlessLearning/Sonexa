@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/features/library/presentation/pages/albums_tab.dart';
-import 'package:ohmymusic/features/library/presentation/pages/artists_tab.dart';
-import 'package:ohmymusic/features/library/presentation/pages/playlists_tab.dart';
-import 'package:ohmymusic/features/library/presentation/pages/songs_tab.dart';
+import 'package:sonexa/features/library/presentation/pages/albums_tab.dart';
+import 'package:sonexa/features/library/presentation/pages/artists_tab.dart';
+import 'package:sonexa/features/library/presentation/pages/playlists_tab.dart';
+import 'package:sonexa/features/library/presentation/pages/songs_tab.dart';
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});

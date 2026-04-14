@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:ohmymusic/core/widgets/app_image.dart';
-import 'package:ohmymusic/features/library/domain/entities/album.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/library/domain/entities/album.dart';
 
 class AlbumGridTile extends StatelessWidget {
   const AlbumGridTile({

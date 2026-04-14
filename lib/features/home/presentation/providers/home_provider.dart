@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:ohmymusic/features/library/data/models/subsonic_response_models.dart';
-import 'package:ohmymusic/features/library/domain/entities/album.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
+import 'package:sonexa/features/library/domain/entities/album.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 // Re-export commonly used providers for home page convenience
-export 'package:ohmymusic/features/library/presentation/providers/library_provider.dart'
+export 'package:sonexa/features/library/presentation/providers/library_provider.dart'
     show subsonicApiClientProvider, libraryRepositoryProvider;
 
 // ─── 最新专辑 ──────────────────────────────────────────────

@@ -5,10 +5,10 @@ import 'package:audio_service/audio_service.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rxdart/rxdart.dart';
 
-import 'package:ohmymusic/core/audio/audio_handler.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/player/domain/entities/player_state.dart'
+import 'package:sonexa/core/audio/audio_handler.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/player/domain/entities/player_state.dart'
     as ps;
 
 class _PlaybackTimelineSnapshot {

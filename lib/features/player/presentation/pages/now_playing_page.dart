@@ -4,18 +4,18 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:ohmymusic/core/audio/audio_handler.dart' as ah;
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/core/utils/formatters.dart';
-import 'package:ohmymusic/features/download/presentation/providers/download_provider.dart';
-import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/playlist_provider.dart';
-import 'package:ohmymusic/features/lyrics/presentation/providers/lyrics_provider.dart';
-import 'package:ohmymusic/features/lyrics/presentation/widgets/lyrics_display.dart';
-import 'package:ohmymusic/features/player/presentation/providers/favorites_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/audio/audio_handler.dart' as ah;
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
+import 'package:sonexa/features/library/domain/entities/playlist.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/playlist_provider.dart';
+import 'package:sonexa/features/lyrics/presentation/providers/lyrics_provider.dart';
+import 'package:sonexa/features/lyrics/presentation/widgets/lyrics_display.dart';
+import 'package:sonexa/features/player/presentation/providers/favorites_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class NowPlayingPage extends ConsumerStatefulWidget {
   const NowPlayingPage({super.key});
@@ -387,33 +387,7 @@ class _LyricsPage extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              const LyricsDisplay(),
-              Positioned(
-                right: 14,
-                top: 14,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colorScheme.surface.withValues(alpha: 0.88),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    child: Text(
-                      '长按歌词',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+          child: const LyricsDisplay(),
         ),
       ),
     );

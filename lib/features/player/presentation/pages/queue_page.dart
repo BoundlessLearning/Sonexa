@@ -2,9 +2,9 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/core/utils/formatters.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class QueuePage extends ConsumerWidget {
   const QueuePage({super.key});

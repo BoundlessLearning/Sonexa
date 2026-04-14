@@ -8,14 +8,15 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'package:ohmymusic/app.dart';
-import 'package:ohmymusic/core/audio/audio_handler.dart';
-import 'package:ohmymusic/core/audio/windows_media_controls.dart';
-import 'package:ohmymusic/core/database/app_database.dart';
-import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
-import 'package:ohmymusic/core/utils/image_cache_config.dart';
-import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
+import 'package:sonexa/app.dart';
+import 'package:sonexa/core/audio/audio_handler.dart';
+import 'package:sonexa/core/audio/windows_media_controls.dart';
+import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
+import 'package:sonexa/core/utils/image_cache_config.dart';
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class _BootstrapData {
   const _BootstrapData({
@@ -110,8 +111,10 @@ class _BootstrapAppState extends State<_BootstrapApp> {
     final audioHandler = await AudioService.init(
       builder: () => MusicAudioHandler(),
       config: const AudioServiceConfig(
-        androidNotificationChannelId: 'com.ohmymusic.audio',
-        androidNotificationChannelName: 'OhMyMusic 音乐播放',
+        androidNotificationChannelId:
+            AppBranding.audioNotificationChannelId,
+        androidNotificationChannelName:
+            AppBranding.audioNotificationChannelName,
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
       ),
@@ -168,7 +171,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
             databaseProvider.overrideWithValue(data.database),
             audioHandlerProvider.overrideWithValue(data.audioHandler),
           ],
-          child: const OhMyMusicApp(),
+          child: const SonexaApp(),
         );
       },
     );
@@ -187,7 +190,7 @@ class _BootstrapLoadingScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Initializing OhMyMusic...'),
+            Text('Initializing Sonexa...'),
           ],
         ),
       ),

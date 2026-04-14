@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/widgets/album_grid_tile.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/widgets/album_grid_tile.dart';
 import 'package:shimmer/shimmer.dart';
 
 /// 专辑网格标签页 — 显示分页专辑，点击进入详情

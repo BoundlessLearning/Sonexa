@@ -153,7 +153,7 @@ class ServerConfigs extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'ohmymusic_db'));
+  AppDatabase() : super(driftDatabase(name: 'sonexa_db'));
 
   @override
   int get schemaVersion => 1;

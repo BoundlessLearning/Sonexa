@@ -1,5 +1,5 @@
 #!/bin/bash
-# OhMyMusic Linux 构建脚本
+# Sonexa Linux 构建脚本
 # 自动完成: flutter build → 复制 libmpv 及依赖 → patchelf 设置 RPATH
 # 用法: ./scripts/build_linux.sh [--release]
 
@@ -23,7 +23,7 @@ export PATH="$PATH:$HOME/flutter/bin:$HOME/.local/bin"
 export JAVA_HOME="$HOME/jdk/jdk-21.0.7"
 export PKG_CONFIG_PATH="$HOME/.local/gtk3-dev/usr/lib/x86_64-linux-gnu/pkgconfig:$HOME/.local/gtk3-dev/usr/share/pkgconfig"
 
-echo "=== OhMyMusic Linux Build ==="
+echo "=== Sonexa Linux Build ==="
 echo "模式: $BUILD_MODE"
 echo "项目: $PROJECT_ROOT"
 echo ""

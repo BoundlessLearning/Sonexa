@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:ohmymusic/features/download/presentation/providers/download_provider.dart';
-import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
-import 'package:ohmymusic/features/library/domain/entities/song.dart';
-import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
-import 'package:ohmymusic/features/library/presentation/providers/playlist_provider.dart';
-import 'package:ohmymusic/features/player/presentation/providers/favorites_provider.dart';
+import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
+import 'package:sonexa/features/library/domain/entities/playlist.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/playlist_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/favorites_provider.dart';
 
 /// 歌曲右键/长按上下文菜单，包含：添加到播放列表、收藏、下载。
 class SongContextMenu {
