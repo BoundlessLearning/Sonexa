@@ -26,9 +26,11 @@ class LyricsDisplay extends ConsumerWidget {
     final lyricsRequest = ref.watch(currentLyricsRequestProvider);
 
     if (lyricsRequest == null) {
-      unawaited(DiagnosticLogger.instance.log(
-        '[DIAG][LYRICS] placeholder: request=null',
-      ));
+      unawaited(
+        DiagnosticLogger.instance.log(
+          '[DIAG][LYRICS] placeholder: request=null',
+        ),
+      );
       return const _LyricsPlaceholder(text: '暂无歌词');
     }
 
@@ -36,23 +38,29 @@ class LyricsDisplay extends ConsumerWidget {
 
     return lyricsAsync.when(
       loading: () {
-        unawaited(DiagnosticLogger.instance.log(
-          '[DIAG][LYRICS] loading: songId=${lyricsRequest.songId}',
-        ));
+        unawaited(
+          DiagnosticLogger.instance.log(
+            '[DIAG][LYRICS] loading: songId=${lyricsRequest.songId}',
+          ),
+        );
         return const Center(child: CircularProgressIndicator());
       },
       error: (error, _) {
-        unawaited(DiagnosticLogger.instance.log(
-          '[DIAG][LYRICS] placeholder: error for songId=${lyricsRequest.songId}, '
-          'error=$error',
-        ));
+        unawaited(
+          DiagnosticLogger.instance.log(
+            '[DIAG][LYRICS] placeholder: error for songId=${lyricsRequest.songId}, '
+            'error=$error',
+          ),
+        );
         return const _LyricsPlaceholder(text: '暂无歌词');
       },
       data: (lyrics) {
         if (lyrics == null || lyrics.lines.isEmpty) {
-          unawaited(DiagnosticLogger.instance.log(
-            '[DIAG][LYRICS] placeholder: empty data for songId=${lyricsRequest.songId}',
-          ));
+          unawaited(
+            DiagnosticLogger.instance.log(
+              '[DIAG][LYRICS] placeholder: empty data for songId=${lyricsRequest.songId}',
+            ),
+          );
           return const _LyricsPlaceholder(text: '暂无歌词');
         }
 
@@ -108,8 +116,10 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
       return;
     }
 
-    _diag('[DIAG][LYRICS] scheduleScroll: index=$index, '
-        'last=$_lastHighlightedIndex, attached=${_itemScrollController.isAttached}');
+    _diag(
+      '[DIAG][LYRICS] scheduleScroll: index=$index, '
+      'last=$_lastHighlightedIndex, attached=${_itemScrollController.isAttached}',
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_scrollToLine(index));
@@ -120,7 +130,9 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
   void didUpdateWidget(covariant _SyncedLyricsView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.lyrics.songId != widget.lyrics.songId) {
-      _diag('[DIAG][LYRICS] song changed: ${oldWidget.lyrics.songId} -> ${widget.lyrics.songId}');
+      _diag(
+        '[DIAG][LYRICS] song changed: ${oldWidget.lyrics.songId} -> ${widget.lyrics.songId}',
+      );
       _lastHighlightedIndex = -1;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_itemScrollController.isAttached) {
@@ -155,9 +167,11 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
     if (!_itemScrollController.isAttached ||
         index < 0 ||
         index == _lastHighlightedIndex) {
-      _diag('[DIAG][LYRICS] scrollTo skipped: '
-          'index=$index, last=$_lastHighlightedIndex, '
-          'attached=${_itemScrollController.isAttached}');
+      _diag(
+        '[DIAG][LYRICS] scrollTo skipped: '
+        'index=$index, last=$_lastHighlightedIndex, '
+        'attached=${_itemScrollController.isAttached}',
+      );
       return;
     }
 
@@ -182,10 +196,16 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
     final textTheme = theme.textTheme;
     final lines = widget.lyrics.lines;
     final positionAsync = ref.watch(positionProvider);
+    final offsetMs = ref.watch(currentLyricsOffsetProvider);
     final position = positionAsync.valueOrNull ?? Duration.zero;
-    final currentIndex = widget.lyrics.isSynced
-        ? _findCurrentLineIndex(lines, position.inMilliseconds)
-        : -1;
+    final effectivePositionMs = (position.inMilliseconds + offsetMs).clamp(
+      0,
+      1 << 31,
+    ).toInt();
+    final currentIndex =
+        widget.lyrics.isSynced
+            ? _findCurrentLineIndex(lines, effectivePositionMs)
+            : -1;
 
     // _diag('[DIAG][LYRICS] build: '
     //     'songId=${widget.lyrics.songId}, '
@@ -210,13 +230,13 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
       fontWeight: FontWeight.w500,
       color: colorScheme.onSurface.withValues(alpha: 0.72),
     );
-    final translationStyle =
-        (textTheme.bodySmall ?? const TextStyle()).copyWith(
-      fontSize: 13,
-      height: 1.3,
-      fontWeight: FontWeight.w500,
-      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.82),
-    );
+    final translationStyle = (textTheme.bodySmall ?? const TextStyle())
+        .copyWith(
+          fontSize: 13,
+          height: 1.3,
+          fontWeight: FontWeight.w500,
+          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.82),
+        );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -240,8 +260,9 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
                 vertical: _lyricsVerticalPadding,
               ),
               child: ConstrainedBox(
-                constraints:
-                    const BoxConstraints(minHeight: _lyricsMinLineHeight),
+                constraints: const BoxConstraints(
+                  minHeight: _lyricsMinLineHeight,
+                ),
                 child: AnimatedContainer(
                   duration: _lyricsTextAnimationDuration,
                   curve: Curves.easeOutCubic,
@@ -250,9 +271,10 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: isCurrent
-                        ? colorScheme.primary.withValues(alpha: 0.08)
-                        : Colors.transparent,
+                    color:
+                        isCurrent
+                            ? colorScheme.primary.withValues(alpha: 0.08)
+                            : Colors.transparent,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Center(

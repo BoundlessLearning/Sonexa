@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
+import 'package:ohmymusic/features/download/data/download_dao.dart';
 import 'package:ohmymusic/features/download/data/download_manager.dart';
 import 'package:ohmymusic/features/download/domain/entities/download_task.dart';
 import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
@@ -69,6 +70,28 @@ final isDownloadedProvider = Provider.family<bool, String>((ref, songId) {
         task.localPath != null &&
         task.localPath!.isNotEmpty,
   );
+});
+
+final downloadedSongPathProvider = FutureProvider.family<String?, String>((
+  ref,
+  songId,
+) async {
+  final database = ref.read(databaseProvider);
+  final dao = DownloadDao(database);
+  final download = await dao.getDownloadBySongId(songId);
+  if (download == null ||
+      download.status != DownloadStatus.completed.name ||
+      download.localPath.isEmpty) {
+    return null;
+  }
+
+  final file = File(download.localPath);
+  if (!await file.exists()) {
+    return null;
+  }
+
+  final fileSize = await file.length();
+  return fileSize > 0 ? download.localPath : null;
 });
 
 final downloadProgressProvider = Provider.family<double?, String>((ref, taskId) {

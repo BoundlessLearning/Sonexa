@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:ohmymusic/core/database/daos/settings_dao.dart';
 import 'package:ohmymusic/features/auth/presentation/providers/auth_provider.dart';
 import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
 import 'package:ohmymusic/features/lyrics/data/repositories/lyrics_repository.dart';
@@ -68,8 +69,10 @@ final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
 
 /// 使用同一条 mediaItem emission 里的 songId/artist/title 生成歌词请求快照。
 /// 这样可以避免 songId 与元信息来自不同时刻，导致歌词短暂显示后又回退到空白。
-final lyricsProvider =
-    FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((ref, request) async {
+final lyricsProvider = FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((
+  ref,
+  request,
+) async {
   final repo = await ref.watch(lyricsRepositoryProvider.future);
   return repo.getLyrics(request.songId, request.artist, request.title);
 });
@@ -79,8 +82,10 @@ final showLyricsProvider = StateProvider<bool>((ref) => true);
 
 /// 联网搜索歌词候选列表（lrclib）。
 /// 参数格式: "songId|artist|title"
-final lyricsSearchProvider =
-    FutureProvider.family<List<Lyrics>, String>((ref, query) async {
+final lyricsSearchProvider = FutureProvider.family<List<Lyrics>, String>((
+  ref,
+  query,
+) async {
   final parts = query.split('|');
   if (parts.length < 3) return [];
   final songId = parts[0];
@@ -88,9 +93,44 @@ final lyricsSearchProvider =
   final title = parts.sublist(2).join('|'); // title 中可能包含 |
   final repo = await ref.watch(lyricsRepositoryProvider.future);
 
-  return repo.searchLrclib(
-        songId: songId,
-        artist: artist,
-        title: title,
-      );
+  return repo.searchLrclib(songId: songId, artist: artist, title: title);
 });
+
+final currentLyricsOffsetProvider = Provider<int>((ref) {
+  final request = ref.watch(currentLyricsRequestProvider);
+  if (request == null) {
+    return 0;
+  }
+
+  return ref.watch(lyricsOffsetProvider(request.songId)).valueOrNull ?? 0;
+});
+
+final lyricsOffsetProvider =
+    AsyncNotifierProvider.family<LyricsOffsetNotifier, int, String>(
+      LyricsOffsetNotifier.new,
+    );
+
+class LyricsOffsetNotifier extends FamilyAsyncNotifier<int, String> {
+  static const _settingPrefix = 'lyrics_offset_ms_';
+
+  late final SettingsDao _settingsDao = SettingsDao(ref.read(databaseProvider));
+
+  @override
+  Future<int> build(String arg) async {
+    final rawValue = await _settingsDao.getSetting('$_settingPrefix$arg');
+    return int.tryParse(rawValue ?? '') ?? 0;
+  }
+
+  Future<void> setOffset(int offsetMs) async {
+    final normalized = offsetMs.clamp(-5000, 5000);
+    state = AsyncData(normalized);
+    await _settingsDao.setSetting('$_settingPrefix$arg', normalized.toString());
+  }
+
+  Future<void> adjustBy(int deltaMs) async {
+    final current = state.valueOrNull ?? await future;
+    await setOffset(current + deltaMs);
+  }
+
+  Future<void> reset() => setOffset(0);
+}

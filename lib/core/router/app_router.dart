@@ -11,6 +11,7 @@ import 'package:ohmymusic/features/home/presentation/pages/song_list_page.dart';
 import 'package:ohmymusic/features/home/presentation/providers/home_provider.dart';
 import 'package:ohmymusic/features/library/presentation/pages/album_detail_page.dart';
 import 'package:ohmymusic/features/library/presentation/pages/artist_detail_page.dart';
+import 'package:ohmymusic/features/library/presentation/pages/filtered_song_list_page.dart';
 import 'package:ohmymusic/features/library/presentation/pages/library_page.dart';
 import 'package:ohmymusic/features/library/presentation/pages/playlist_detail_page.dart';
 import 'package:ohmymusic/features/lyrics/presentation/pages/lyrics_search_page.dart';
@@ -141,6 +142,29 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => fadeTransition(
           key: state.pageKey,
           child: const DownloadsPage(),
+        ),
+      ),
+      GoRoute(
+        path: '/album-songs/:id',
+        pageBuilder: (context, state) => fadeTransition(
+          key: ValueKey(
+            'album-songs-${state.pathParameters['id']}-${state.uri.query}',
+          ),
+          child: FilteredSongListPage.album(
+            albumId: state.pathParameters['id']!,
+            title: state.uri.queryParameters['title'] ?? '专辑歌曲',
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/artist-songs',
+        pageBuilder: (context, state) => fadeTransition(
+          key: ValueKey('artist-songs-${state.uri.query}'),
+          child: FilteredSongListPage.artist(
+            artistId: state.uri.queryParameters['artistId'] ?? '',
+            artistName: state.uri.queryParameters['artistName'] ?? '',
+            title: state.uri.queryParameters['title'] ?? '歌手歌曲',
+          ),
         ),
       ),
       GoRoute(

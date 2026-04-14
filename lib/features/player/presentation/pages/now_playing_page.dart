@@ -7,120 +7,258 @@ import 'package:go_router/go_router.dart';
 import 'package:ohmymusic/core/audio/audio_handler.dart' as ah;
 import 'package:ohmymusic/core/utils/diagnostic_logger.dart';
 import 'package:ohmymusic/core/utils/formatters.dart';
+import 'package:ohmymusic/features/download/presentation/providers/download_provider.dart';
+import 'package:ohmymusic/features/library/domain/entities/playlist.dart';
+import 'package:ohmymusic/features/library/domain/entities/song.dart';
+import 'package:ohmymusic/features/library/presentation/providers/library_provider.dart';
+import 'package:ohmymusic/features/library/presentation/providers/playlist_provider.dart';
 import 'package:ohmymusic/features/lyrics/presentation/providers/lyrics_provider.dart';
 import 'package:ohmymusic/features/lyrics/presentation/widgets/lyrics_display.dart';
 import 'package:ohmymusic/features/player/presentation/providers/favorites_provider.dart';
 import 'package:ohmymusic/features/player/presentation/providers/player_provider.dart';
 
-class NowPlayingPage extends ConsumerWidget {
+class NowPlayingPage extends ConsumerStatefulWidget {
   const NowPlayingPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NowPlayingPage> createState() => _NowPlayingPageState();
+}
+
+class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
+  late final PageController _pageController;
+  late int _currentPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = ref.read(showLyricsProvider) ? 1 : 0;
+    _pageController = PageController(initialPage: _currentPage);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _animateToPage(int page) async {
+    if (_currentPage == page) {
+      return;
+    }
+
+    await _pageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Future<void> _showLyricsMenu(Song song) async {
+    final action = await showModalBottomSheet<_LyricsSheetAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('调整歌词'),
+                subtitle: const Text('微调歌词与歌曲进度的同步'),
+                onTap:
+                    () => Navigator.of(context).pop(_LyricsSheetAction.adjust),
+              ),
+              ListTile(
+                leading: const Icon(Icons.swap_horiz_rounded),
+                title: const Text('切换歌词'),
+                subtitle: const Text('重新搜索并替换当前歌词'),
+                onTap:
+                    () => Navigator.of(
+                      context,
+                    ).pop(_LyricsSheetAction.switchLyrics),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) {
+      return;
+    }
+
+    switch (action) {
+      case _LyricsSheetAction.adjust:
+        await _showLyricsAdjustSheet(song.id);
+        return;
+      case _LyricsSheetAction.switchLyrics:
+        context.push(
+          Uri(
+            path: '/lyrics-search',
+            queryParameters: {
+              'songId': song.id,
+              'artist': song.artist,
+              'title': song.title,
+            },
+          ).toString(),
+        );
+        return;
+    }
+  }
+
+  Future<void> _showLyricsAdjustSheet(String songId) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final offsetAsync = ref.watch(lyricsOffsetProvider(songId));
+            final offsetMs = offsetAsync.valueOrNull ?? 0;
+            final notifier = ref.read(lyricsOffsetProvider(songId).notifier);
+
+            Future<void> updateOffset(int nextOffset) async {
+              await notifier.setOffset(nextOffset);
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '歌词校准',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatLyricsOffsetLabel(offsetMs),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Slider(
+                      value: offsetMs.toDouble().clamp(-3000, 3000),
+                      min: -3000,
+                      max: 3000,
+                      divisions: 60,
+                      label: _formatLyricsOffsetLabel(offsetMs),
+                      onChanged: (value) => updateOffset(value.round()),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _OffsetChip(
+                          label: '延后 0.5s',
+                          onTap: () => updateOffset(offsetMs - 500),
+                        ),
+                        _OffsetChip(
+                          label: '延后 0.1s',
+                          onTap: () => updateOffset(offsetMs - 100),
+                        ),
+                        _OffsetChip(
+                          label: '提前 0.1s',
+                          onTap: () => updateOffset(offsetMs + 100),
+                        ),
+                        _OffsetChip(
+                          label: '提前 0.5s',
+                          onTap: () => updateOffset(offsetMs + 500),
+                        ),
+                        _OffsetChip(label: '重置', onTap: notifier.reset),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showSongActionsSheet({
+    required Song song,
+    required String? coverUrl,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder:
+          (context) => _SongActionsSheet(
+            parentContext: this.context,
+            song: song,
+            coverUrl: coverUrl,
+            onOpenAlbum:
+                song.albumId.isEmpty
+                    ? null
+                    : () => this.context.push(
+                      Uri(
+                        path: '/album-songs/${song.albumId}',
+                        queryParameters: {'title': song.album},
+                      ).toString(),
+                    ),
+            onOpenArtist:
+                song.artistId.isEmpty && song.artist.isEmpty
+                    ? null
+                    : () => this.context.push(
+                      Uri(
+                        path: '/artist-songs',
+                        queryParameters: {
+                          'artistId': song.artistId,
+                          'artistName': song.artist,
+                          'title': song.artist,
+                        },
+                      ).toString(),
+                    ),
+          ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final audioHandler = ref.watch(audioHandlerProvider);
     final favorites = ref.watch(favoritesNotifierProvider);
     final currentSong = ref.watch(currentSongProvider);
     final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
-    final showLyrics = ref.watch(showLyricsProvider);
     final songId = currentSong?.id;
     final isFavorite = songId != null && favorites.contains(songId);
-
-    return NowPlayingView(
-      title: currentSong?.title ?? '未播放',
-      artist: currentSong?.artist ?? '',
-      coverUrl: currentMediaItem?.artUri?.toString(),
-      showLyrics: showLyrics,
-      mediaPanel: showLyrics
-          ? const _LyricsPanel()
-          : _ArtworkPanel(coverUrl: currentMediaItem?.artUri?.toString()),
-      seekBar: _SeekBar(
-        audioHandler: audioHandler,
-        mediaItem: currentMediaItem,
-      ),
-      playbackControls: _PlaybackControls(
-        audioHandler: audioHandler,
-        songId: songId,
-        isFavorite: isFavorite,
-      ),
-      onClose: () => context.pop(),
-      onToggleLyrics: () =>
-          ref.read(showLyricsProvider.notifier).state = !showLyrics,
-      onSearchLyrics: currentSong == null
-          ? null
-          : () {
-              context.push(Uri(
-                path: '/lyrics-search',
-                queryParameters: {
-                  'songId': currentSong.id,
-                  'artist': currentSong.artist,
-                  'title': currentSong.title,
-                },
-              ).toString());
-            },
-      onShowQueue: () => context.push('/queue'),
-    );
-  }
-}
-
-class NowPlayingView extends StatelessWidget {
-  const NowPlayingView({
-    super.key,
-    required this.title,
-    required this.artist,
-    required this.showLyrics,
-    required this.mediaPanel,
-    required this.seekBar,
-    required this.playbackControls,
-    required this.onClose,
-    required this.onToggleLyrics,
-    required this.onShowQueue,
-    this.coverUrl,
-    this.onSearchLyrics,
-  });
-
-  final String title;
-  final String artist;
-  final String? coverUrl;
-  final bool showLyrics;
-  final Widget mediaPanel;
-  final Widget seekBar;
-  final Widget playbackControls;
-  final VoidCallback onClose;
-  final VoidCallback onToggleLyrics;
-  final VoidCallback onShowQueue;
-  final VoidCallback? onSearchLyrics;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final coverUrl = currentMediaItem?.artUri?.toString();
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.keyboard_arrow_down_rounded),
           iconSize: 32,
-          onPressed: onClose,
+          onPressed: () => context.pop(),
         ),
-        title: const Text('正在播放'),
+        title: _PageIndicator(currentPage: _currentPage, onTap: _animateToPage),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.text_snippet_rounded),
-            color: showLyrics
-                ? colorScheme.primary
-                : colorScheme.onSurfaceVariant,
-            onPressed: onToggleLyrics,
-            tooltip: showLyrics ? '显示封面' : '显示歌词',
-          ),
-          IconButton(
-            icon: const Icon(Icons.lyrics_rounded),
-            tooltip: '搜索歌词',
-            onPressed: onSearchLyrics,
-          ),
-          IconButton(
             icon: const Icon(Icons.queue_music_rounded),
-            onPressed: onShowQueue,
+            onPressed: () => context.push('/queue'),
+          ),
+          IconButton(
+            icon: const _TwoDotMoreIcon(),
+            tooltip: '更多操作',
+            onPressed:
+                currentSong == null
+                    ? null
+                    : () => _showSongActionsSheet(
+                      song: currentSong,
+                      coverUrl: coverUrl,
+                    ),
           ),
         ],
       ),
@@ -128,40 +266,54 @@ class NowPlayingView extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
         child: Column(
           children: [
-            Flexible(
-              flex: showLyrics ? 5 : 4,
-              child: Column(
-                mainAxisAlignment:
-                    showLyrics ? MainAxisAlignment.start : MainAxisAlignment.center,
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (page) {
+                  setState(() {
+                    _currentPage = page;
+                  });
+                  ref.read(showLyricsProvider.notifier).state = page == 1;
+                },
                 children: [
-                  mediaPanel,
+                  _ArtworkPage(coverUrl: coverUrl),
+                  _LyricsPage(
+                    onLongPress:
+                        currentSong == null
+                            ? null
+                            : () => _showLyricsMenu(currentSong),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
             Text(
-              title,
+              currentSong?.title ?? '未播放',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
-              artist,
+              currentSong?.artist ?? '',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            seekBar,
+            _SeekBar(audioHandler: audioHandler, mediaItem: currentMediaItem),
             const SizedBox(height: 8),
-            playbackControls,
+            _PlaybackControls(
+              audioHandler: audioHandler,
+              songId: songId,
+              isFavorite: isFavorite,
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -170,30 +322,8 @@ class NowPlayingView extends StatelessWidget {
   }
 }
 
-class _LyricsPanel extends StatelessWidget {
-  const _LyricsPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Expanded(
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: const LyricsDisplay(),
-        ),
-      ),
-    );
-  }
-}
-
-class _ArtworkPanel extends StatelessWidget {
-  const _ArtworkPanel({this.coverUrl});
+class _ArtworkPage extends StatelessWidget {
+  const _ArtworkPage({required this.coverUrl});
 
   final String? coverUrl;
 
@@ -201,48 +331,171 @@ class _ArtworkPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      width: 280,
-      height: 280,
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withValues(alpha: 0.2),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+    return Center(
+      child: Container(
+        width: 280,
+        height: 280,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withValues(alpha: 0.18),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Hero(
+          tag: 'now-playing-cover',
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child:
+                coverUrl != null && coverUrl!.isNotEmpty
+                    ? Image.network(
+                      coverUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder:
+                          (_, __, ___) => const Icon(Icons.album, size: 180),
+                    )
+                    : const Icon(Icons.album, size: 180),
           ),
-        ],
-      ),
-      child: Hero(
-        tag: 'now-playing-cover',
-        child: coverUrl != null && coverUrl!.isNotEmpty
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  coverUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.album,
-                    size: 200,
-                  ),
-                ),
-              )
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: const Icon(Icons.album, size: 200),
-              ),
+        ),
       ),
     );
   }
 }
 
+class _LyricsPage extends StatelessWidget {
+  const _LyricsPage({this.onLongPress});
+
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              const LyricsDisplay(),
+              Positioned(
+                right: 14,
+                top: 14,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface.withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      '长按歌词',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PageIndicator extends StatelessWidget {
+  const _PageIndicator({required this.currentPage, required this.onTap});
+
+  final int currentPage;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    Widget buildMarker(int index) {
+      final active = currentPage == index;
+      return GestureDetector(
+        onTap: () => onTap(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: active ? 18 : 6,
+          height: 6,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          decoration: BoxDecoration(
+            color:
+                active
+                    ? colorScheme.onSurface
+                    : colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [buildMarker(0), buildMarker(1)],
+    );
+  }
+}
+
+class _TwoDotMoreIcon extends StatelessWidget {
+  const _TwoDotMoreIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        IconTheme.of(context).color ?? Theme.of(context).iconTheme.color;
+    return SizedBox(
+      width: 20,
+      height: 20,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _Dot(color: color),
+          const SizedBox(height: 4),
+          _Dot(color: color),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color});
+
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+}
+
 class _SeekBar extends ConsumerStatefulWidget {
-  const _SeekBar({
-    required this.audioHandler,
-    required this.mediaItem,
-  });
+  const _SeekBar({required this.audioHandler, required this.mediaItem});
 
   final ah.MusicAudioHandler audioHandler;
   final MediaItem? mediaItem;
@@ -266,15 +519,20 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
     final position = positionAsync.valueOrNull ?? Duration.zero;
     final bufferedPosition = bufferedPositionAsync.valueOrNull ?? Duration.zero;
     final duration =
-        durationAsync.valueOrNull ?? widget.mediaItem?.duration ?? Duration.zero;
+        durationAsync.valueOrNull ??
+        widget.mediaItem?.duration ??
+        Duration.zero;
 
     final maxSeconds = duration.inSeconds.toDouble();
     final safeMaxSeconds = maxSeconds > 0 ? maxSeconds : 1.0;
-    final bufferedSeconds =
-        bufferedPosition.inSeconds.toDouble().clamp(0.0, safeMaxSeconds);
-    final displaySeconds = _dragging
-        ? _dragValue
-        : position.inSeconds.toDouble().clamp(0.0, safeMaxSeconds);
+    final bufferedSeconds = bufferedPosition.inSeconds.toDouble().clamp(
+      0.0,
+      safeMaxSeconds,
+    );
+    final displaySeconds =
+        _dragging
+            ? _dragValue
+            : position.inSeconds.toDouble().clamp(0.0, safeMaxSeconds);
 
     return Column(
       children: [
@@ -285,8 +543,9 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             activeTrackColor: colorScheme.primary,
             inactiveTrackColor: colorScheme.surfaceContainerHighest,
-            secondaryActiveTrackColor:
-                colorScheme.onSurfaceVariant.withValues(alpha: 0.28),
+            secondaryActiveTrackColor: colorScheme.onSurfaceVariant.withValues(
+              alpha: 0.28,
+            ),
             thumbColor: colorScheme.primary,
           ),
           child: Slider(
@@ -308,7 +567,8 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
               setState(() {
                 _dragging = false;
               });
-              ref.read(playerSeekIntentProvider.notifier).state = DateTime.now();
+              ref.read(playerSeekIntentProvider.notifier).state =
+                  DateTime.now();
               DiagnosticLogger.instance.log(
                 '[OP] seek_bar_change_end: seconds=${value.toInt()}',
               );
@@ -322,7 +582,9 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                formatDuration(_dragging ? _dragValue.toInt() : position.inSeconds),
+                formatDuration(
+                  _dragging ? _dragValue.toInt() : position.inSeconds,
+                ),
                 style: textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -365,9 +627,7 @@ class _PlaybackControls extends ConsumerWidget {
           children: [
             SizedBox(
               width: 48,
-              child: Center(
-                child: _PlayModeButton(audioHandler: audioHandler),
-              ),
+              child: Center(child: _PlayModeButton(audioHandler: audioHandler)),
             ),
             Expanded(
               child: Row(
@@ -385,7 +645,8 @@ class _PlaybackControls extends ConsumerWidget {
                   const SizedBox(width: 12),
                   FloatingActionButton(
                     onPressed: () {
-                      final action = playing ? 'pause_button_tap' : 'play_button_tap';
+                      final action =
+                          playing ? 'pause_button_tap' : 'play_button_tap';
                       DiagnosticLogger.instance.log('[OP] $action');
                       if (playing) {
                         audioHandler.pause();
@@ -431,20 +692,22 @@ class _PlaybackControls extends ConsumerWidget {
               width: 48,
               child: Center(
                 child: IconButton(
-                  onPressed: songId == null
-                      ? null
-                      : () => ref
-                          .read(favoritesNotifierProvider.notifier)
-                          .toggleFavorite(songId!),
+                  onPressed:
+                      songId == null
+                          ? null
+                          : () => ref
+                              .read(favoritesNotifierProvider.notifier)
+                              .toggleFavorite(songId!),
                   icon: Icon(
                     isFavorite
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
                   ),
                   iconSize: 24,
-                  color: isFavorite
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
+                  color:
+                      isFavorite
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                   tooltip: isFavorite ? '取消收藏' : '收藏',
                 ),
               ),
@@ -468,25 +731,17 @@ class _PlayModeButton extends ConsumerWidget {
 
     final (icon, color, tooltip) = switch (mode) {
       PlayMode.sequential => (
-          Icons.arrow_right_alt_rounded,
-          colorScheme.onSurfaceVariant,
-          '顺序播放',
-        ),
-      PlayMode.shuffle => (
-          Icons.shuffle_rounded,
-          colorScheme.primary,
-          '随机播放',
-        ),
+        Icons.arrow_right_alt_rounded,
+        colorScheme.onSurfaceVariant,
+        '顺序播放',
+      ),
+      PlayMode.shuffle => (Icons.shuffle_rounded, colorScheme.primary, '随机播放'),
       PlayMode.repeatOne => (
-          Icons.repeat_one_rounded,
-          colorScheme.primary,
-          '单曲循环',
-        ),
-      PlayMode.repeatAll => (
-          Icons.repeat_rounded,
-          colorScheme.primary,
-          '列表循环',
-        ),
+        Icons.repeat_one_rounded,
+        colorScheme.primary,
+        '单曲循环',
+      ),
+      PlayMode.repeatAll => (Icons.repeat_rounded, colorScheme.primary, '列表循环'),
     };
 
     return IconButton(
@@ -501,7 +756,9 @@ class _PlayModeButton extends ConsumerWidget {
           PlayMode.repeatOne => PlayMode.repeatAll,
           PlayMode.repeatAll => PlayMode.sequential,
         };
-        DiagnosticLogger.instance.log('[OP] play_mode_switch: $mode -> $nextMode');
+        DiagnosticLogger.instance.log(
+          '[OP] play_mode_switch: $mode -> $nextMode',
+        );
         ref.read(playModeProvider.notifier).state = nextMode;
 
         switch (nextMode) {
@@ -519,52 +776,488 @@ class _PlayModeButton extends ConsumerWidget {
   }
 }
 
-@Preview(name: 'Now Playing / Artwork')
-Widget previewNowPlayingArtwork() {
-  return MaterialApp(
-    home: NowPlayingView(
+class _SongActionsSheet extends ConsumerWidget {
+  const _SongActionsSheet({
+    required this.parentContext,
+    required this.song,
+    required this.coverUrl,
+    this.onOpenAlbum,
+    this.onOpenArtist,
+  });
+
+  final BuildContext parentContext;
+  final Song song;
+  final String? coverUrl;
+  final VoidCallback? onOpenAlbum;
+  final VoidCallback? onOpenArtist;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloadedPathAsync = ref.watch(downloadedSongPathProvider(song.id));
+    final isDownloaded = downloadedPathAsync.valueOrNull != null;
+    final isCheckingDownload = downloadedPathAsync.isLoading;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    Future<void> startDownload() async {
+      final manager = await ref.read(downloadManagerProvider.future);
+      await manager.enqueueDownload(song);
+      ref.invalidate(downloadedSongPathProvider(song.id));
+      if (parentContext.mounted) {
+        ScaffoldMessenger.of(
+          parentContext,
+        ).showSnackBar(SnackBar(content: Text('已开始下载 ${song.title}')));
+      }
+    }
+
+    Future<void> openPlaylistPicker() async {
+      Navigator.of(context).pop();
+      await showDialog<void>(
+        context: parentContext,
+        builder: (dialogContext) => _PlaylistPickerDialog(song: song),
+      );
+    }
+
+    void closeSheetThen(VoidCallback action) {
+      Navigator.of(context).pop();
+      Future<void>.delayed(const Duration(milliseconds: 220), () {
+        if (parentContext.mounted) {
+          action();
+        }
+      });
+    }
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child:
+                        coverUrl != null && coverUrl!.isNotEmpty
+                            ? Image.network(
+                              coverUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder:
+                                  (_, __, ___) =>
+                                      const Icon(Icons.album_rounded, size: 36),
+                            )
+                            : const Icon(Icons.album_rounded, size: 36),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        song.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Container(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.42,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  _InfoTile(
+                    icon: Icons.album_rounded,
+                    label: '专辑',
+                    value: song.album.isEmpty ? '未知专辑' : song.album,
+                    onTap:
+                        onOpenAlbum == null
+                            ? null
+                            : () => closeSheetThen(onOpenAlbum!),
+                  ),
+                  _InfoTile(
+                    icon: Icons.person_rounded,
+                    label: '歌手',
+                    value: song.artist.isEmpty ? '未知歌手' : song.artist,
+                    onTap:
+                        onOpenArtist == null
+                            ? null
+                            : () => closeSheetThen(onOpenArtist!),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed:
+                        isDownloaded || isCheckingDownload ? null : startDownload,
+                    icon: Icon(
+                      isDownloaded
+                          ? Icons.check_circle_rounded
+                          : Icons.download_rounded,
+                    ),
+                    label: Text(
+                      isCheckingDownload
+                          ? '检查中'
+                          : isDownloaded
+                              ? '已下载'
+                              : '下载歌曲',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: openPlaylistPicker,
+                    icon: const Icon(Icons.playlist_add_rounded),
+                    label: const Text('添加到歌单'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: Icon(icon, color: colorScheme.primary),
+      title: Text(label),
+      subtitle: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
+}
+
+class _OffsetChip extends StatelessWidget {
+  const _OffsetChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(label: Text(label), onPressed: onTap);
+  }
+}
+
+class _PlaylistPickerDialog extends ConsumerWidget {
+  const _PlaylistPickerDialog({required this.song});
+
+  final Song song;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playlistsAsync = ref.watch(playlistsProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Text('添加到歌单'),
+      content: SizedBox(
+        width: 320,
+        child: playlistsAsync.when(
+          loading:
+              () => const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          error: (error, _) => Text('获取歌单失败: $error'),
+          data: (playlists) {
+            if (playlists.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text('暂无歌单，请先创建一个歌单。'),
+              );
+            }
+
+            return ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: playlists.length,
+                itemBuilder: (context, index) {
+                  final playlist = playlists[index];
+                  return ListTile(
+                    leading: Icon(
+                      Icons.queue_music_rounded,
+                      color: colorScheme.primary,
+                    ),
+                    title: Text(
+                      playlist.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text('${playlist.songCount} 首歌曲'),
+                    onTap: () => _addToPlaylist(context, ref, playlist),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => _showNewPlaylistDialog(context, ref),
+          child: const Text('新建歌单'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _addToPlaylist(
+    BuildContext context,
+    WidgetRef ref,
+    Playlist playlist,
+  ) async {
+    Navigator.of(context).pop();
+
+    try {
+      await ref
+          .read(playlistCrudNotifierProvider.notifier)
+          .addSongToPlaylist(playlist.id, song.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已添加到「${playlist.name}」')));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('添加失败: $error')));
+      }
+    }
+  }
+
+  void _showNewPlaylistDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('新建歌单'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: '歌单名称',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _createAndAdd(dialogContext, ref, controller),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => _createAndAdd(dialogContext, ref, controller),
+                child: const Text('创建并添加'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<void> _createAndAdd(
+    BuildContext context,
+    WidgetRef ref,
+    TextEditingController controller,
+  ) async {
+    final name = controller.text.trim();
+    if (name.isEmpty) {
+      return;
+    }
+
+    Navigator.of(context).pop();
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    try {
+      final api = await ref.read(subsonicApiClientProvider.future);
+      await api.createPlaylist(name: name, songIds: [song.id]);
+      ref.invalidate(playlistsProvider);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建失败: $error')));
+      }
+    }
+  }
+}
+
+String _formatLyricsOffsetLabel(int offsetMs) {
+  if (offsetMs == 0) {
+    return '当前无偏移';
+  }
+
+  final hasFraction = offsetMs.abs() % 1000 != 0;
+  final seconds = (offsetMs.abs() / 1000).toStringAsFixed(hasFraction ? 1 : 0);
+  return offsetMs > 0 ? '歌词提前 $seconds 秒' : '歌词延后 $seconds 秒';
+}
+
+enum _LyricsSheetAction { adjust, switchLyrics }
+
+@Preview(name: 'Now Playing / Cover')
+Widget previewNowPlayingCover() {
+  return const MaterialApp(
+    home: _PreviewNowPlayingScaffold(
+      currentPage: 0,
       title: '我们的歌谣',
       artist: '群星',
-      coverUrl: null,
-      showLyrics: false,
-      mediaPanel: const _ArtworkPanel(),
-      seekBar: const _PreviewSeekBar(),
-      playbackControls: const _PreviewPlaybackControls(),
-      onClose: _noop,
-      onToggleLyrics: _noop,
-      onSearchLyrics: _noop,
-      onShowQueue: _noop,
     ),
   );
 }
 
 @Preview(name: 'Now Playing / Lyrics')
 Widget previewNowPlayingLyrics() {
-  return MaterialApp(
-    home: NowPlayingView(
+  return const MaterialApp(
+    home: _PreviewNowPlayingScaffold(
+      currentPage: 1,
       title: '我们的歌谣',
       artist: '群星',
-      coverUrl: null,
-      showLyrics: true,
-      mediaPanel: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: const Center(
-          child: Text('歌词区域预览'),
-        ),
-      ),
-      seekBar: const _PreviewSeekBar(),
-      playbackControls: const _PreviewPlaybackControls(),
-      onClose: _noop,
-      onToggleLyrics: _noop,
-      onSearchLyrics: _noop,
-      onShowQueue: _noop,
     ),
   );
+}
+
+class _PreviewNowPlayingScaffold extends StatelessWidget {
+  const _PreviewNowPlayingScaffold({
+    required this.currentPage,
+    required this.title,
+    required this.artist,
+  });
+
+  final int currentPage;
+  final String title;
+  final String artist;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          onPressed: _noop,
+        ),
+        title: _PageIndicator(currentPage: currentPage, onTap: (_) {}),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.queue_music_rounded),
+            onPressed: _noop,
+          ),
+          IconButton(icon: const _TwoDotMoreIcon(), onPressed: _noop),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          children: [
+            Expanded(
+              child:
+                  currentPage == 0
+                      ? const _ArtworkPage(coverUrl: null)
+                      : const _PreviewLyricsPage(),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              artist,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const _PreviewSeekBar(),
+            const SizedBox(height: 8),
+            const _PreviewPlaybackControls(),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewLyricsPage extends StatelessWidget {
+  const _PreviewLyricsPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      alignment: Alignment.center,
+      child: const Text('歌词区域预览'),
+    );
+  }
 }
 
 class _PreviewSeekBar extends StatelessWidget {
@@ -580,14 +1273,11 @@ class _PreviewSeekBar extends StatelessWidget {
           max: 317,
           onChanged: (_) {},
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('1:12'),
-              Text('5:17'),
-            ],
+            children: [Text('1:12'), Text('5:17')],
           ),
         ),
       ],
@@ -606,10 +1296,7 @@ class _PreviewPlaybackControls extends StatelessWidget {
         SizedBox(
           width: 48,
           child: Center(
-            child: Icon(
-              Icons.shuffle_rounded,
-              color: colorScheme.primary,
-            ),
+            child: Icon(Icons.shuffle_rounded, color: colorScheme.primary),
           ),
         ),
         Expanded(
@@ -631,10 +1318,7 @@ class _PreviewPlaybackControls extends StatelessWidget {
         SizedBox(
           width: 48,
           child: Center(
-            child: Icon(
-              Icons.favorite_rounded,
-              color: colorScheme.primary,
-            ),
+            child: Icon(Icons.favorite_rounded, color: colorScheme.primary),
           ),
         ),
       ],

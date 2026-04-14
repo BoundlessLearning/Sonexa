@@ -209,6 +209,71 @@ final albumSongsProvider =
   return repo.getAlbumSongs(albumId);
 });
 
+class ArtistSongsRequest {
+  const ArtistSongsRequest({
+    required this.artistId,
+    required this.artistName,
+  });
+
+  final String artistId;
+  final String artistName;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ArtistSongsRequest &&
+        other.artistId == artistId &&
+        other.artistName == artistName;
+  }
+
+  @override
+  int get hashCode => Object.hash(artistId, artistName);
+}
+
+final artistSongsProvider =
+    FutureProvider.family<List<Song>, ArtistSongsRequest>((ref, request) async {
+  final artistId = request.artistId.trim();
+  final artistName = request.artistName.trim();
+
+  if (artistId.isNotEmpty) {
+    try {
+      final albums = await ref.watch(artistAlbumsProvider(artistId).future);
+      final repo = await ref.watch(libraryRepositoryProvider.future);
+      final albumSongLists = await Future.wait(
+        albums.map((album) => repo.getAlbumSongs(album.id)),
+      );
+      final songs = _dedupeSongs(albumSongLists.expand((songs) => songs));
+      if (songs.isNotEmpty) {
+        return songs;
+      }
+    } catch (_) {
+      // Song-level artistId can differ from getArtist IDs on some servers.
+    }
+  }
+
+  if (artistName.isEmpty) {
+    return const <Song>[];
+  }
+
+  final api = await ref.watch(subsonicApiClientProvider.future);
+  final response = await api.getTopSongs(artistName, count: 100);
+  final body = response.subsonicResponseBody;
+  final topSongs = body?['topSongs'];
+  final songs = (topSongs?['song'] as List<dynamic>? ?? [])
+      .map((song) => _parsePaginatedSong(song as Map<String, dynamic>));
+  return _dedupeSongs(songs);
+});
+
+List<Song> _dedupeSongs(Iterable<Song> songs) {
+  final result = <Song>[];
+  final seenIds = <String>{};
+  for (final song in songs) {
+    if (seenIds.add(song.id)) {
+      result.add(song);
+    }
+  }
+  return result;
+}
+
 // ─── 艺术家详情 ─────────────────────────────────────────────
 
 final artistDetailProvider =
