@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 import 'package:sonexa/features/library/presentation/widgets/album_grid_tile.dart';
 import 'package:shimmer/shimmer.dart';
@@ -61,46 +62,50 @@ class _AlbumsTabState extends ConsumerState<AlbumsTab> {
   @override
   Widget build(BuildContext context) {
     final albumsAsync = ref.watch(paginatedAlbumsProvider);
+    final l10n = AppLocalizations.of(context);
 
     return albumsAsync.when(
       loading: () => _buildShimmerGrid(context),
-      error: (error, stack) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
+      error:
+          (error, stack) => Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.failedToLoad,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.tonal(
+                  onPressed:
+                      () =>
+                          ref.read(paginatedAlbumsProvider.notifier).refresh(),
+                  child: Text(l10n.retry),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '加载失败',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: () => ref.read(paginatedAlbumsProvider.notifier).refresh(),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      ),
+          ),
       data: (albums) {
         if (albums.isEmpty) {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 240),
-                Center(child: Text('暂无专辑')),
+              children: [
+                const SizedBox(height: 240),
+                Center(child: Text(l10n.noAlbums)),
               ],
             ),
           );
@@ -139,18 +144,21 @@ class _AlbumsTabState extends ConsumerState<AlbumsTab> {
               SliverToBoxAdapter(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
-                  child: _isLoadingMore
-                      ? const Padding(
-                          padding: EdgeInsets.only(bottom: 24),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.5),
+                  child:
+                      _isLoadingMore
+                          ? const Padding(
+                            padding: EdgeInsets.only(bottom: 24),
+                            child: Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                ),
+                              ),
                             ),
-                          ),
-                        )
-                      : hasMore
+                          )
+                          : hasMore
                           ? const SizedBox(height: 24)
                           : const SizedBox(height: 12),
                 ),

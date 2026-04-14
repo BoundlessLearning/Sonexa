@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/library/data/repositories/library_repository.dart';
 import 'package:sonexa/features/library/domain/entities/album.dart';
 import 'package:sonexa/features/library/domain/entities/artist.dart';
@@ -45,6 +46,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final query = ref.watch(searchQueryProvider);
     final searchAsync = ref.watch(searchResultProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -53,49 +55,55 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           autofocus: true,
           onChanged: _onSearchChanged,
           decoration: InputDecoration(
-            hintText: '搜索歌曲、专辑、艺术家...',
+            hintText: l10n.searchHint,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(24),
               borderSide: BorderSide.none,
             ),
             filled: true,
             fillColor: colorScheme.surfaceContainerHighest,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
             prefixIcon: const Icon(Icons.search),
-            suffixIcon: _controller.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _controller.clear();
-                      ref.read(searchQueryProvider.notifier).state = '';
-                    },
-                  )
-                : null,
+            suffixIcon:
+                _controller.text.isNotEmpty
+                    ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _controller.clear();
+                        ref.read(searchQueryProvider.notifier).state = '';
+                      },
+                    )
+                    : null,
           ),
           style: Theme.of(context).textTheme.bodyLarge,
         ),
       ),
-      body: query.trim().isEmpty
-          ? _buildEmptyHint(context)
-          : searchAsync.when(
-              data: (result) {
-                if (result == null) return _buildEmptyHint(context);
-                return _buildResults(context, result);
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(
-                child: Text(
-                  '搜索出错: $error',
-                  style: TextStyle(color: colorScheme.error),
-                ),
+      body:
+          query.trim().isEmpty
+              ? _buildEmptyHint(context)
+              : searchAsync.when(
+                data: (result) {
+                  if (result == null) return _buildEmptyHint(context);
+                  return _buildResults(context, result);
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error:
+                    (error, _) => Center(
+                      child: Text(
+                        l10n.searchFailed(error),
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                    ),
               ),
-            ),
     );
   }
 
   Widget _buildEmptyHint(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -107,21 +115,21 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '输入关键词搜索音乐',
+            l10n.searchEmptyHint,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildResults(
-      BuildContext context, SearchResult result) {
+  Widget _buildResults(BuildContext context, SearchResult result) {
     final songs = result.songs;
     final albums = result.albums;
     final artists = result.artists;
+    final l10n = AppLocalizations.of(context);
 
     return DefaultTabController(
       length: 3,
@@ -129,9 +137,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         children: [
           TabBar(
             tabs: [
-              Tab(text: '歌曲 (${songs.length})'),
-              Tab(text: '专辑 (${albums.length})'),
-              Tab(text: '艺术家 (${artists.length})'),
+              Tab(text: l10n.searchSongsTab(songs.length)),
+              Tab(text: l10n.searchAlbumsTab(albums.length)),
+              Tab(text: l10n.searchArtistsTab(artists.length)),
             ],
           ),
           Expanded(
@@ -160,15 +168,18 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           coverArtUrl: api.getCoverArtUrl(song.coverArtId),
           onTap: () {
             final audioHandler = ref.read(audioHandlerProvider);
-            final items = songs
-                .map((s) => s.toMediaItem(
-                      api.getStreamUrl(
-                        s.id,
-                        format: s.preferredPlaybackFormat,
+            final items =
+                songs
+                    .map(
+                      (s) => s.toMediaItem(
+                        api.getStreamUrl(
+                          s.id,
+                          format: s.preferredPlaybackFormat,
+                        ),
+                        api.getCoverArtUrl(s.coverArtId),
                       ),
-                      api.getCoverArtUrl(s.coverArtId),
-                    ))
-                .toList();
+                    )
+                    .toList();
             audioHandler.loadAndPlay(items, initialIndex: index);
           },
         );
@@ -222,10 +233,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             overflow: TextOverflow.ellipsis,
           ),
           subtitle: Text(
-            '${artist.albumCount} 张专辑',
+            AppLocalizations.of(context).albumCount(artist.albumCount),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           onTap: () => context.push('/library/artist/${artist.id}'),
         );
@@ -236,10 +247,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget _buildNoResults() {
     return Center(
       child: Text(
-        '未找到相关结果',
+        AppLocalizations.of(context).noSearchResults,
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

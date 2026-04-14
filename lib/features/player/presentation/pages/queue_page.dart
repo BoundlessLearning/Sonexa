@@ -2,6 +2,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
@@ -15,12 +16,10 @@ class QueuePage extends ConsumerWidget {
     final currentSong = ref.watch(currentSongProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('播放队列'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(l10n.queueTitle), centerTitle: true),
       body: StreamBuilder<List<MediaItem>>(
         stream: audioHandler.queue,
         builder: (context, queueSnapshot) {
@@ -38,7 +37,7 @@ class QueuePage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '播放队列为空',
+                    l10n.queueEmpty,
                     style: textTheme.bodyLarge?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -92,35 +91,39 @@ class QueuePage extends ConsumerWidget {
                     );
                     audioHandler.skipToQueueItem(index);
                   },
-                  leading: isCurrent
-                      ? Icon(
-                          Icons.equalizer_rounded,
-                          color: colorScheme.primary,
-                        )
-                      : Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: item.artUri != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    item.artUri.toString(),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Icon(
+                  leading:
+                      isCurrent
+                          ? Icon(
+                            Icons.equalizer_rounded,
+                            color: colorScheme.primary,
+                          )
+                          : Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child:
+                                item.artUri != null
+                                    ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        item.artUri.toString(),
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (_, __, ___) => Icon(
+                                              Icons.music_note,
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                    )
+                                    : Icon(
                                       Icons.music_note,
                                       color: colorScheme.onSurfaceVariant,
                                     ),
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.music_note,
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                        ),
+                          ),
                   title: Text(
                     item.title,
                     maxLines: 1,
@@ -135,9 +138,10 @@ class QueuePage extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.bodySmall?.copyWith(
-                      color: isCurrent
-                          ? colorScheme.primary.withValues(alpha: 0.7)
-                          : colorScheme.onSurfaceVariant,
+                      color:
+                          isCurrent
+                              ? colorScheme.primary.withValues(alpha: 0.7)
+                              : colorScheme.onSurfaceVariant,
                     ),
                   ),
                   trailing: Row(

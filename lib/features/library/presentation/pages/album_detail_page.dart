@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
@@ -29,6 +30,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
     final albumAsync = ref.watch(albumDetailProvider(widget.albumId));
     final songsAsync = ref.watch(albumSongsProvider(widget.albumId));
     final favorites = ref.watch(favoritesNotifierProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       body: albumAsync.when(
@@ -61,10 +63,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black54,
-                            ],
+                            colors: [Colors.transparent, Colors.black54],
                           ),
                         ),
                       ),
@@ -82,17 +81,17 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
                     children: [
                       // 艺术家名（可点击跳转）
                       GestureDetector(
-                        onTap: () => context.push(
-                          '/library/artist/${album.artistId}',
-                        ),
+                        onTap:
+                            () => context.push(
+                              '/library/artist/${album.artistId}',
+                            ),
                         child: Text(
                           album.artist,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -100,14 +99,12 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
                       Text(
                         [
                           if (album.year != null) '${album.year}',
-                          '${album.songCount} 首歌曲',
+                          l10n.songCount(album.songCount),
                           formatDuration(album.duration),
                         ].join(' · '),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -121,34 +118,32 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
                   child: songsAsync.when(
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
-                    data: (songs) => FilledButton.icon(
-                      onPressed: songs.isEmpty
-                          ? null
-                          : () => _playAll(songs),
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('播放全部'),
-                    ),
+                    data:
+                        (songs) => FilledButton.icon(
+                          onPressed:
+                              songs.isEmpty ? null : () => _playAll(songs),
+                          icon: const Icon(Icons.play_arrow),
+                          label: Text(l10n.playAll),
+                        ),
                   ),
                 ),
               ),
 
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 8),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
               // ── 歌曲列表 ──────────────────────────────────
               songsAsync.when(
                 loading: () => _buildSongListShimmer(context),
-                error: (error, stack) => SliverToBoxAdapter(
-                  child: _buildError(context, error),
-                ),
+                error:
+                    (error, stack) =>
+                        SliverToBoxAdapter(child: _buildError(context, error)),
                 data: (songs) {
                   if (songs.isEmpty) {
-                    return const SliverToBoxAdapter(
+                    return SliverToBoxAdapter(
                       child: Center(
                         child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Text('暂无歌曲'),
+                          padding: const EdgeInsets.all(32),
+                          child: Text(l10n.noSongs),
                         ),
                       ),
                     );
@@ -158,16 +153,16 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
                     itemCount: songs.length,
                     itemBuilder: (context, index) {
                       final song = songs[index];
-                      final songCoverUrl =
-                          api.getCoverArtUrl(song.coverArtId);
+                      final songCoverUrl = api.getCoverArtUrl(song.coverArtId);
 
                       return SongListTile(
                         song: song,
                         coverArtUrl: songCoverUrl,
                         isFavorite: favorites.contains(song.id),
-                        onFavoriteToggle: () => ref
-                            .read(favoritesNotifierProvider.notifier)
-                            .toggleFavorite(song.id),
+                        onFavoriteToggle:
+                            () => ref
+                                .read(favoritesNotifierProvider.notifier)
+                                .toggleFavorite(song.id),
                         onTap: () => _playFromIndex(songs, index),
                       );
                     },
@@ -176,9 +171,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
               ),
 
               // 底部留白（给迷你播放器让位）
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           );
         },
@@ -199,14 +192,15 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
       '[OP] album_detail_play: startIndex=$index, totalSongs=${songs.length}',
     );
 
-    final items = songs.map((song) {
-      final streamUrl = api.getStreamUrl(
-        song.id,
-        format: song.preferredPlaybackFormat,
-      );
-      final artUrl = api.getCoverArtUrl(song.coverArtId);
-      return song.toMediaItem(streamUrl, artUrl);
-    }).toList();
+    final items =
+        songs.map((song) {
+          final streamUrl = api.getStreamUrl(
+            song.id,
+            format: song.preferredPlaybackFormat,
+          );
+          final artUrl = api.getCoverArtUrl(song.coverArtId);
+          return song.toMediaItem(streamUrl, artUrl);
+        }).toList();
 
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
@@ -311,7 +305,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '加载失败',
+            AppLocalizations.of(context).failedToLoad,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
@@ -326,7 +320,7 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
               ref.invalidate(albumDetailProvider(widget.albumId));
               ref.invalidate(albumSongsProvider(widget.albumId));
             },
-            child: const Text('重试'),
+            child: Text(AppLocalizations.of(context).retry),
           ),
         ],
       ),

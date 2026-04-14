@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
@@ -13,24 +14,18 @@ class FilteredSongListPage extends ConsumerWidget {
     super.key,
     required this.title,
     required String albumId,
-  })  : songsProvider = albumSongsProvider(albumId),
-        onRetry = _retryAlbum(albumId);
+  }) : songsProvider = albumSongsProvider(albumId),
+       onRetry = _retryAlbum(albumId);
 
   FilteredSongListPage.artist({
     super.key,
     required this.title,
     required String artistId,
     required String artistName,
-  })  : songsProvider = artistSongsProvider(
-          ArtistSongsRequest(
-            artistId: artistId,
-            artistName: artistName,
-          ),
-        ),
-        onRetry = _retryArtist(
-          artistId: artistId,
-          artistName: artistName,
-        );
+  }) : songsProvider = artistSongsProvider(
+         ArtistSongsRequest(artistId: artistId, artistName: artistName),
+       ),
+       onRetry = _retryArtist(artistId: artistId, artistName: artistName);
 
   final String title;
   final ProviderListenable<AsyncValue<List<Song>>> songsProvider;
@@ -40,18 +35,18 @@ class FilteredSongListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final songsAsync = ref.watch(songsProvider);
     final favorites = ref.watch(favoritesNotifierProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: songsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorState(
-          error: error,
-          onRetry: () => onRetry(ref),
-        ),
+        error:
+            (error, _) =>
+                _ErrorState(error: error, onRetry: () => onRetry(ref)),
         data: (songs) {
           if (songs.isEmpty) {
-            return const Center(child: Text('暂无歌曲'));
+            return Center(child: Text(l10n.noSongs));
           }
 
           final api = ref.read(subsonicApiClientProvider).valueOrNull;
@@ -64,9 +59,10 @@ class FilteredSongListPage extends ConsumerWidget {
                 song: song,
                 coverArtUrl: api?.getCoverArtUrl(song.coverArtId, size: 300),
                 isFavorite: favorites.contains(song.id),
-                onFavoriteToggle: () => ref
-                    .read(favoritesNotifierProvider.notifier)
-                    .toggleFavorite(song.id),
+                onFavoriteToggle:
+                    () => ref
+                        .read(favoritesNotifierProvider.notifier)
+                        .toggleFavorite(song.id),
                 onTap: () => _playSongs(ref, songs, index),
               );
             },
@@ -83,14 +79,15 @@ class FilteredSongListPage extends ConsumerWidget {
     }
 
     final audioHandler = ref.read(audioHandlerProvider);
-    final items = songs
-        .map(
-          (song) => song.toMediaItem(
-            api.getStreamUrl(song.id, format: song.preferredPlaybackFormat),
-            api.getCoverArtUrl(song.coverArtId, size: 300),
-          ),
-        )
-        .toList();
+    final items =
+        songs
+            .map(
+              (song) => song.toMediaItem(
+                api.getStreamUrl(song.id, format: song.preferredPlaybackFormat),
+                api.getCoverArtUrl(song.coverArtId, size: 300),
+              ),
+            )
+            .toList();
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
 }
@@ -111,10 +108,7 @@ void Function(WidgetRef ref) _retryArtist({
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.error,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.error, required this.onRetry});
 
   final Object error;
   final VoidCallback onRetry;
@@ -134,7 +128,7 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              '歌曲加载失败',
+              AppLocalizations.of(context).songsLoadFailed,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -146,7 +140,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.tonal(
               onPressed: onRetry,
-              child: const Text('重试'),
+              child: Text(AppLocalizations.of(context).retry),
             ),
           ],
         ),

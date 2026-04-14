@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sonexa/features/auth/presentation/widgets/server_form.dart';
 
@@ -14,6 +14,7 @@ class LoginPage extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     ref.listen(authStateProvider, (previous, next) {
       if (next.isLoggedIn) {
@@ -29,14 +30,10 @@ class LoginPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.music_note,
-                  size: 80,
-                  color: colorScheme.primary,
-                ),
+                Icon(Icons.music_note, size: 80, color: colorScheme.primary),
                 const SizedBox(height: 16),
                 Text(
-                  AppBranding.name,
+                  l10n.appName,
                   style: theme.textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.onSurface,
@@ -44,7 +41,7 @@ class LoginPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  AppBranding.positioning,
+                  l10n.positioning,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

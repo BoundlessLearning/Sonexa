@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
 import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
 import 'package:sonexa/features/library/domain/entities/album.dart';
@@ -18,14 +19,15 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSong = ref.watch(currentSongProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('首页'),
+        title: Text(l10n.homeTab),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: '刷新',
+            tooltip: l10n.refresh,
             onPressed: () => _refreshAll(ref),
           ),
         ],
@@ -40,7 +42,7 @@ class HomePage extends ConsumerWidget {
             children: [
               // ─── 随机推荐 ─────────────────────────────────
               _SectionHeader(
-                title: '随机推荐',
+                title: l10n.randomSongs,
                 onSeeMore: () => context.push('/random-songs'),
               ),
               _RandomSongsSection(ref: ref),
@@ -49,32 +51,30 @@ class HomePage extends ConsumerWidget {
 
               // ─── 我的收藏 ─────────────────────────────────
               _SectionHeader(
-                title: '我的收藏',
+                title: l10n.starredSongs,
                 onSeeMore: () => context.push('/starred-songs'),
               ),
               _SongSection(
                 provider: starredSongsProvider,
                 ref: ref,
-                emptyMessage: '暂无收藏歌曲',
+                emptyMessage: l10n.noStarredSongs,
               ),
 
               const SizedBox(height: 24),
 
               // ─── 最新专辑 ─────────────────────────────────
               _SectionHeader(
-                title: '最新专辑',
-                onSeeMore: () => StatefulNavigationShell.of(context).goBranch(1),
+                title: l10n.newestAlbums,
+                onSeeMore:
+                    () => StatefulNavigationShell.of(context).goBranch(1),
               ),
-              _AlbumSection(
-                provider: newestAlbumsProvider,
-                ref: ref,
-              ),
+              _AlbumSection(provider: newestAlbumsProvider, ref: ref),
 
               const SizedBox(height: 24),
 
               // ─── 最近播放 ─────────────────────────────────
               _SectionHeader(
-                title: '最近播放',
+                title: l10n.recentlyPlayed,
                 onSeeMore: () => context.push('/history'),
               ),
               const _RecentPlaySection(),
@@ -84,13 +84,13 @@ class HomePage extends ConsumerWidget {
 
                 // ─── 猜你喜欢 ───────────────────────────────
                 _SectionHeader(
-                  title: '猜你喜欢',
+                  title: l10n.similarSongs,
                   onSeeMore: () => context.push('/similar-songs'),
                 ),
                 _SongSection(
                   provider: similarSongsProvider,
                   ref: ref,
-                  emptyMessage: '暂无相似推荐',
+                  emptyMessage: l10n.noSimilarSongs,
                 ),
               ],
             ],
@@ -112,10 +112,7 @@ class HomePage extends ConsumerWidget {
 // ─── Section Header ──────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.onSeeMore,
-  });
+  const _SectionHeader({required this.title, required this.onSeeMore});
 
   final String title;
   final VoidCallback onSeeMore;
@@ -129,14 +126,13 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           TextButton(
             onPressed: onSeeMore,
-            child: const Text('查看更多'),
+            child: Text(AppLocalizations.of(context).seeMore),
           ),
         ],
       ),
@@ -154,16 +150,20 @@ class _RandomSongsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final songsAsync = ref.watch(homeRandomSongsProvider);
+    final l10n = AppLocalizations.of(context);
 
     return songsAsync.when(
-      loading: () => _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
-      error: (error, stack) => _SectionError(
-        error: error,
-        onRetry: () => ref.invalidate(homeRandomSongsProvider),
-      ),
+      loading:
+          () =>
+              _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
+      error:
+          (error, stack) => _SectionError(
+            error: error,
+            onRetry: () => ref.invalidate(homeRandomSongsProvider),
+          ),
       data: (songs) {
         if (songs.isEmpty) {
-          return const _SectionEmpty(message: '暂无推荐');
+          return _SectionEmpty(message: l10n.noRandomSongs);
         }
         return SizedBox(
           height: 190,
@@ -175,8 +175,7 @@ class _RandomSongsSection extends StatelessWidget {
             itemBuilder: (context, index) {
               final song = songs[index];
               final api = ref.read(subsonicApiClientProvider).valueOrNull;
-              final coverUrl =
-                  api?.getCoverArtUrl(song.coverArtId, size: 300);
+              final coverUrl = api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return _SongCard(
                 song: song,
@@ -194,12 +193,15 @@ class _RandomSongsSection extends StatelessWidget {
     final api = ref.read(subsonicApiClientProvider).valueOrNull;
     if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
-    final items = songs
-        .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
-              api.getCoverArtUrl(s.coverArtId, size: 300),
-            ))
-        .toList();
+    final items =
+        songs
+            .map(
+              (s) => s.toMediaItem(
+                api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
+                api.getCoverArtUrl(s.coverArtId, size: 300),
+              ),
+            )
+            .toList();
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
 }
@@ -220,12 +222,14 @@ class _SongSection extends StatelessWidget {
     final songsAsync = ref.watch(provider);
 
     return songsAsync.when(
-      loading: () =>
-          _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
-      error: (error, stack) => _SectionError(
-        error: error,
-        onRetry: () => ref.invalidate(provider),
-      ),
+      loading:
+          () =>
+              _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
+      error:
+          (error, stack) => _SectionError(
+            error: error,
+            onRetry: () => ref.invalidate(provider),
+          ),
       data: (songs) {
         final visibleSongs = songs.take(20).toList();
         if (visibleSongs.isEmpty) {
@@ -241,8 +245,7 @@ class _SongSection extends StatelessWidget {
             itemBuilder: (context, index) {
               final song = visibleSongs[index];
               final api = ref.read(subsonicApiClientProvider).valueOrNull;
-              final coverUrl =
-                  api?.getCoverArtUrl(song.coverArtId, size: 300);
+              final coverUrl = api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return _SongCard(
                 song: song,
@@ -260,12 +263,15 @@ class _SongSection extends StatelessWidget {
     final api = ref.read(subsonicApiClientProvider).valueOrNull;
     if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
-    final items = songs
-        .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
-              api.getCoverArtUrl(s.coverArtId, size: 300),
-            ))
-        .toList();
+    final items =
+        songs
+            .map(
+              (s) => s.toMediaItem(
+                api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
+                api.getCoverArtUrl(s.coverArtId, size: 300),
+              ),
+            )
+            .toList();
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
 }
@@ -292,11 +298,7 @@ class _SongCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppImage(
-              url: coverUrl,
-              size: 120,
-              borderRadius: 12,
-            ),
+            AppImage(url: coverUrl, size: 120, borderRadius: 12),
             const SizedBox(height: 8),
             Text(
               song.title,
@@ -309,8 +311,8 @@ class _SongCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -327,18 +329,21 @@ class _RecentPlaySection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyAsync = ref.watch(playHistoryNotifierProvider);
+    final l10n = AppLocalizations.of(context);
 
     return historyAsync.when(
-      loading: () =>
-          _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
-      error: (error, _) => _SectionError(
-        error: error,
-        onRetry: () =>
-            ref.read(playHistoryNotifierProvider.notifier).refresh(),
-      ),
+      loading:
+          () =>
+              _buildHorizontalShimmer(context, cardWidth: 130, cardHeight: 120),
+      error:
+          (error, _) => _SectionError(
+            error: error,
+            onRetry:
+                () => ref.read(playHistoryNotifierProvider.notifier).refresh(),
+          ),
       data: (history) {
         if (history.isEmpty) {
-          return const _SectionEmpty(message: '暂无播放记录');
+          return _SectionEmpty(message: l10n.noPlayHistory);
         }
         // 去重：只取每首歌最近一次播放，最多显示 20 首
         final seen = <String>{};
@@ -420,11 +425,7 @@ class _RecentPlayCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppImage(
-              url: coverUrl,
-              size: 120,
-              borderRadius: 12,
-            ),
+            AppImage(url: coverUrl, size: 120, borderRadius: 12),
             const SizedBox(height: 8),
             Text(
               title,
@@ -437,8 +438,8 @@ class _RecentPlayCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -450,10 +451,7 @@ class _RecentPlayCard extends StatelessWidget {
 // ─── Album Section ───────────────────────────────────────────
 
 class _AlbumSection extends StatelessWidget {
-  const _AlbumSection({
-    required this.provider,
-    required this.ref,
-  });
+  const _AlbumSection({required this.provider, required this.ref});
 
   final FutureProvider<List<Album>> provider;
   final WidgetRef ref;
@@ -461,16 +459,20 @@ class _AlbumSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final albumsAsync = ref.watch(provider);
+    final l10n = AppLocalizations.of(context);
 
     return albumsAsync.when(
-      loading: () => _buildHorizontalShimmer(context, cardWidth: 150, cardHeight: 140),
-      error: (error, stack) => _SectionError(
-        error: error,
-        onRetry: () => ref.invalidate(provider),
-      ),
+      loading:
+          () =>
+              _buildHorizontalShimmer(context, cardWidth: 150, cardHeight: 140),
+      error:
+          (error, stack) => _SectionError(
+            error: error,
+            onRetry: () => ref.invalidate(provider),
+          ),
       data: (albums) {
         if (albums.isEmpty) {
-          return const _SectionEmpty(message: '暂无专辑');
+          return _SectionEmpty(message: l10n.noAlbums);
         }
         return SizedBox(
           height: 210,
@@ -482,8 +484,7 @@ class _AlbumSection extends StatelessWidget {
             itemBuilder: (context, index) {
               final album = albums[index];
               final api = ref.read(subsonicApiClientProvider).valueOrNull;
-              final coverUrl =
-                  api?.getCoverArtUrl(album.coverArtId, size: 300);
+              final coverUrl = api?.getCoverArtUrl(album.coverArtId, size: 300);
 
               return _AlbumCard(
                 album: album,
@@ -520,11 +521,7 @@ class _AlbumCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppImage(
-              url: coverUrl,
-              size: 140,
-              borderRadius: 12,
-            ),
+            AppImage(url: coverUrl, size: 140, borderRadius: 12),
             const SizedBox(height: 8),
             Text(
               album.name,
@@ -537,8 +534,8 @@ class _AlbumCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -611,10 +608,7 @@ Widget _buildHorizontalShimmer(
 // ─── Shared: Section Error ───────────────────────────────────
 
 class _SectionError extends StatelessWidget {
-  const _SectionError({
-    required this.error,
-    required this.onRetry,
-  });
+  const _SectionError({required this.error, required this.onRetry});
 
   final Object error;
   final VoidCallback onRetry;
@@ -633,15 +627,15 @@ class _SectionError extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '加载失败',
+              AppLocalizations.of(context).failedToLoad,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
           ),
           TextButton(
             onPressed: onRetry,
-            child: const Text('重试'),
+            child: Text(AppLocalizations.of(context).retry),
           ),
         ],
       ),
@@ -664,8 +658,8 @@ class _SectionEmpty extends StatelessWidget {
         child: Text(
           message,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

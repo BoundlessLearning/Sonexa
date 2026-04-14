@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 import 'package:sonexa/features/library/presentation/providers/playlist_provider.dart';
@@ -11,47 +12,49 @@ class PlaylistsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playlistsAsync = ref.watch(playlistsProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       body: playlistsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Theme.of(context).colorScheme.error,
+        error:
+            (error, stack) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.failedToLoad,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.tonal(
+                    onPressed: () => ref.invalidate(playlistsProvider),
+                    child: Text(l10n.retry),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                '加载失败',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                error.toString(),
-                style: Theme.of(context).textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.tonal(
-                onPressed: () => ref.invalidate(playlistsProvider),
-                child: const Text('重试'),
-              ),
-            ],
-          ),
-        ),
+            ),
         data: (playlists) {
           if (playlists.isEmpty) {
             return RefreshIndicator(
               onRefresh: () async => ref.invalidate(playlistsProvider),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: Text('暂无播放列表')),
+                children: [
+                  const SizedBox(height: 120),
+                  Center(child: Text(l10n.noPlaylists)),
                 ],
               ),
             );
@@ -70,17 +73,13 @@ class PlaylistsTab extends ConsumerWidget {
                 final coverUrl = api.getCoverArtUrl(playlist.coverArtId);
 
                 return ListTile(
-                  leading: AppImage(
-                    url: coverUrl,
-                    size: 52,
-                    borderRadius: 10,
-                  ),
+                  leading: AppImage(url: coverUrl, size: 52, borderRadius: 10),
                   title: Text(
                     playlist.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text('${playlist.songCount} 首歌曲'),
+                  subtitle: Text(l10n.songCount(playlist.songCount)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/library/playlist/${playlist.id}'),
                 );
@@ -101,37 +100,39 @@ class PlaylistsTab extends ConsumerWidget {
     WidgetRef ref,
   ) async {
     final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context);
 
     try {
       final name = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('新建播放列表'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              labelText: '播放列表名称',
-              hintText: '请输入名称',
+        builder:
+            (dialogContext) => AlertDialog(
+              title: Text(l10n.createPlaylist),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  labelText: l10n.playlistName,
+                  hintText: l10n.enterName,
+                ),
+                onSubmitted: (value) {
+                  Navigator.of(dialogContext).pop(value.trim());
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(controller.text.trim());
+                  },
+                  child: Text(l10n.create),
+                ),
+              ],
             ),
-            onSubmitted: (value) {
-              Navigator.of(dialogContext).pop(value.trim());
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(controller.text.trim());
-              },
-              child: const Text('创建'),
-            ),
-          ],
-        ),
       );
 
       if (name == null || name.isEmpty || !context.mounted) {
@@ -147,14 +148,14 @@ class PlaylistsTab extends ConsumerWidget {
 
       if (crudState.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败：${crudState.error}')),
+          SnackBar(content: Text(l10n.createFailed(crudState.error ?? ''))),
         );
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('播放列表已创建')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.playlistCreated)));
     } finally {
       controller.dispose();
     }

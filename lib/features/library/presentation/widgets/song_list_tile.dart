@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
@@ -36,18 +37,20 @@ class SongListTile extends ConsumerWidget {
 
     return GestureDetector(
       // 桌面端：右键弹出上下文菜单
-      onSecondaryTapUp: showContextMenu
-          ? (details) => SongContextMenu.show(
+      onSecondaryTapUp:
+          showContextMenu
+              ? (details) => SongContextMenu.show(
                 context,
                 ref,
                 song: song,
                 tapPosition: details.globalPosition,
               )
-          : null,
+              : null,
       // 移动端：长按弹出底部菜单
-      onLongPress: showContextMenu
-          ? () => SongContextMenu.show(context, ref, song: song)
-          : null,
+      onLongPress:
+          showContextMenu
+              ? () => SongContextMenu.show(context, ref, song: song)
+              : null,
       child: ListTile(
         leading: AppImage(url: coverArtUrl, size: 48, borderRadius: 8),
         title: Text(
@@ -75,9 +78,8 @@ class SongListTile extends ConsumerWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
                 iconSize: 20,
-                onPressed: () =>
-                    SongContextMenu.show(context, ref, song: song),
-                tooltip: '更多',
+                onPressed: () => SongContextMenu.show(context, ref, song: song),
+                tooltip: AppLocalizations.of(context).more,
               ),
             Text(
               formatDuration(song.duration),

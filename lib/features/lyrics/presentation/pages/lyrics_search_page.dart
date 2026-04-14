@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
 import 'package:sonexa/features/lyrics/presentation/providers/lyrics_provider.dart';
 
@@ -60,12 +61,10 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('搜索歌词'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(l10n.searchLyrics), centerTitle: true),
       body: Column(
         children: [
           // 搜索表单
@@ -75,8 +74,8 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
               children: [
                 TextField(
                   controller: _artistController,
-                  decoration: const InputDecoration(
-                    labelText: '歌手',
+                  decoration: InputDecoration(
+                    labelText: l10n.artist,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -85,8 +84,8 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: '歌曲名',
+                  decoration: InputDecoration(
+                    labelText: l10n.songTitle,
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
@@ -98,7 +97,7 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
                   child: FilledButton.icon(
                     onPressed: _doSearch,
                     icon: const Icon(Icons.search_rounded),
-                    label: const Text('搜索'),
+                    label: Text(l10n.search),
                   ),
                 ),
               ],
@@ -107,21 +106,22 @@ class _LyricsSearchPageState extends ConsumerState<LyricsSearchPage> {
           const Divider(height: 1),
           // 搜索结果列表
           Expanded(
-            child: _searchQuery == null
-                ? Center(
-                    child: Text(
-                      '输入歌手和歌曲名进行搜索',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+            child:
+                _searchQuery == null
+                    ? Center(
+                      child: Text(
+                        l10n.lyricsSearchHint,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
+                    )
+                    : _SearchResultList(
+                      searchQuery: _searchQuery!,
+                      songId: widget.songId,
+                      artist: widget.artist,
+                      title: widget.title,
                     ),
-                  )
-                : _SearchResultList(
-                    searchQuery: _searchQuery!,
-                    songId: widget.songId,
-                    artist: widget.artist,
-                    title: widget.title,
-                  ),
           ),
         ],
       ),
@@ -148,18 +148,22 @@ class _SearchResultList extends ConsumerWidget {
     final resultsAsync = ref.watch(lyricsSearchProvider(searchQuery));
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return resultsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Text('搜索失败: $e',
-            style: textTheme.bodyMedium?.copyWith(color: colorScheme.error)),
-      ),
+      error:
+          (e, _) => Center(
+            child: Text(
+              l10n.lyricsSearchFailed(e),
+              style: textTheme.bodyMedium?.copyWith(color: colorScheme.error),
+            ),
+          ),
       data: (results) {
         if (results.isEmpty) {
           return Center(
             child: Text(
-              '未找到歌词',
+              l10n.noLyricsFound,
               style: textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -174,15 +178,14 @@ class _SearchResultList extends ConsumerWidget {
           itemBuilder: (context, index) {
             final lyrics = results[index];
             // 预览前 3 行歌词
-            final preview = lyrics.lines
-                .take(3)
-                .map((l) => l.text)
-                .join('\n');
+            final preview = lyrics.lines.take(3).map((l) => l.text).join('\n');
 
             return ListTile(
               title: Text(
-                '${lyrics.isSynced ? "[同步] " : "[纯文本] "}'
-                '${lyrics.lines.length} 行',
+                l10n.lyricsCandidateTitle(
+                  isSynced: lyrics.isSynced,
+                  lineCount: lyrics.lines.length,
+                ),
                 style: textTheme.bodyLarge?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -200,7 +203,7 @@ class _SearchResultList extends ConsumerWidget {
               ),
               trailing: FilledButton.tonal(
                 onPressed: () => _applyLyrics(context, ref, lyrics),
-                child: const Text('使用'),
+                child: Text(l10n.use),
               ),
               isThreeLine: true,
             );
@@ -222,24 +225,22 @@ class _SearchResultList extends ConsumerWidget {
       // 刷新歌词 provider 使当前页面更新
       ref.invalidate(
         lyricsProvider(
-          LyricsRequestSnapshot(
-            songId: songId,
-            artist: artist,
-            title: title,
-          ),
+          LyricsRequestSnapshot(songId: songId, artist: artist, title: title),
         ),
       );
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('歌词已替换')),
+          SnackBar(content: Text(AppLocalizations.of(context).lyricsReplaced)),
         );
         context.pop();
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('替换失败: $e')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).lyricsReplaceFailed(e)),
+          ),
         );
       }
     }

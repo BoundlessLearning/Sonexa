@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/download/domain/entities/download_task.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 
@@ -11,30 +12,34 @@ class DownloadsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final downloadListAsync = ref.watch(downloadListProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('下载管理'),
+        title: Text(l10n.downloadManager),
         actions: [
           // 仅当有下载任务时显示全部删除按钮
           downloadListAsync.whenOrNull(
-                data: (tasks) => tasks.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.delete_sweep_rounded),
-                        tooltip: '清空全部',
-                        onPressed: () => _confirmDeleteAll(context, ref),
-                      )
-                    : null,
+                data:
+                    (tasks) =>
+                        tasks.isNotEmpty
+                            ? IconButton(
+                              icon: const Icon(Icons.delete_sweep_rounded),
+                              tooltip: l10n.clearAll,
+                              onPressed: () => _confirmDeleteAll(context, ref),
+                            )
+                            : null,
               ) ??
               const SizedBox.shrink(),
         ],
       ),
       body: downloadListAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorView(
-          error: error.toString(),
-          onRetry: () => ref.invalidate(downloadListProvider),
-        ),
+        error:
+            (error, _) => _ErrorView(
+              error: error.toString(),
+              onRetry: () => ref.invalidate(downloadListProvider),
+            ),
         data: (tasks) {
           if (tasks.isEmpty) {
             return const _EmptyView();
@@ -46,25 +51,28 @@ class DownloadsPage extends ConsumerWidget {
   }
 
   void _confirmDeleteAll(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('清空全部下载'),
-        content: const Text('确定要删除所有下载任务吗？此操作不可撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(l10n.clearAllDownloads),
+            content: Text(l10n.clearAllDownloadsMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () {
+                  ref.read(downloadManagerProvider).valueOrNull?.deleteAll();
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(l10n.confirm),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () {
-              ref.read(downloadManagerProvider).valueOrNull?.deleteAll();
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('确定'),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -88,10 +96,10 @@ class _EmptyView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '暂无下载',
+            AppLocalizations.of(context).noDownloads,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -114,24 +122,20 @@ class _ErrorView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.error_outline_rounded,
-            size: 64,
-            color: colorScheme.error,
-          ),
+          Icon(Icons.error_outline_rounded, size: 64, color: colorScheme.error),
           const SizedBox(height: 16),
           Text(
             error,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+              color: colorScheme.onSurfaceVariant,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded),
-            label: const Text('重试'),
+            label: Text(AppLocalizations.of(context).retry),
           ),
         ],
       ),
@@ -147,20 +151,20 @@ class _DownloadListView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+
     // 将下载任务分为活跃（下载中/等待中/失败）和已完成两组
-    final activeTasks = tasks
-        .where((t) => t.status != DownloadStatus.completed)
-        .toList();
-    final completedTasks = tasks
-        .where((t) => t.status == DownloadStatus.completed)
-        .toList();
+    final activeTasks =
+        tasks.where((t) => t.status != DownloadStatus.completed).toList();
+    final completedTasks =
+        tasks.where((t) => t.status == DownloadStatus.completed).toList();
 
     return ListView(
       children: [
         // ── 活跃下载 ──────────────────────────────────────────
         if (activeTasks.isNotEmpty) ...[
           _SectionHeader(
-            title: '进行中',
+            title: l10n.downloadingSection,
             count: activeTasks.length,
           ),
           ...activeTasks.map(
@@ -171,7 +175,7 @@ class _DownloadListView extends ConsumerWidget {
         // ── 已完成 ────────────────────────────────────────────
         if (completedTasks.isNotEmpty) ...[
           _SectionHeader(
-            title: '已完成',
+            title: l10n.completedSection,
             count: completedTasks.length,
           ),
           ...completedTasks.map(
@@ -212,9 +216,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         '$title ($count)',
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }
@@ -229,24 +233,21 @@ class _DownloadTaskTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ListTile(
           leading: _buildStatusIcon(colorScheme),
-          title: Text(
-            task.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          title: Text(task.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-            '${task.artist} · ${_statusText()}',
+            '${task.artist} · ${_statusText(l10n)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           trailing: _buildActionButton(context, ref, colorScheme),
         ),
@@ -254,10 +255,7 @@ class _DownloadTaskTile extends ConsumerWidget {
         if (task.status == DownloadStatus.downloading)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: LinearProgressIndicator(
-              value: task.progress,
-              minHeight: 2,
-            ),
+            child: LinearProgressIndicator(value: task.progress, minHeight: 2),
           ),
       ],
     );
@@ -275,15 +273,9 @@ class _DownloadTaskTile extends ConsumerWidget {
           ),
         );
       case DownloadStatus.completed:
-        return Icon(
-          Icons.check_circle_rounded,
-          color: colorScheme.primary,
-        );
+        return Icon(Icons.check_circle_rounded, color: colorScheme.primary);
       case DownloadStatus.failed:
-        return Icon(
-          Icons.error_rounded,
-          color: colorScheme.error,
-        );
+        return Icon(Icons.error_rounded, color: colorScheme.error);
       case DownloadStatus.pending:
         return Icon(
           Icons.hourglass_empty_rounded,
@@ -297,19 +289,19 @@ class _DownloadTaskTile extends ConsumerWidget {
     }
   }
 
-  String _statusText() {
+  String _statusText(AppLocalizations l10n) {
     switch (task.status) {
       case DownloadStatus.downloading:
         final percent = (task.progress * 100).toInt();
-        return '下载中 $percent%';
+        return l10n.downloadingStatus(percent);
       case DownloadStatus.completed:
-        return '已完成';
+        return l10n.completedStatus;
       case DownloadStatus.failed:
-        return task.error ?? '失败';
+        return task.error ?? l10n.failedStatus;
       case DownloadStatus.pending:
-        return '等待中';
+        return l10n.pendingStatus;
       case DownloadStatus.paused:
-        return '已暂停';
+        return l10n.pausedStatus;
     }
   }
 
@@ -323,30 +315,40 @@ class _DownloadTaskTile extends ConsumerWidget {
       case DownloadStatus.pending:
         return IconButton(
           icon: Icon(Icons.close_rounded, color: colorScheme.onSurfaceVariant),
-          tooltip: '取消',
-          onPressed: () =>
-              ref.read(downloadManagerProvider).valueOrNull?.cancel(task.id),
+          tooltip: AppLocalizations.of(context).cancel,
+          onPressed:
+              () => ref
+                  .read(downloadManagerProvider)
+                  .valueOrNull
+                  ?.cancel(task.id),
         );
       case DownloadStatus.completed:
         return IconButton(
           icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
-          tooltip: '删除',
-          onPressed: () =>
-              ref.read(downloadManagerProvider).valueOrNull?.delete(task.id),
+          tooltip: AppLocalizations.of(context).delete,
+          onPressed:
+              () => ref
+                  .read(downloadManagerProvider)
+                  .valueOrNull
+                  ?.delete(task.id),
         );
       case DownloadStatus.failed:
         return IconButton(
           icon: Icon(Icons.refresh_rounded, color: colorScheme.primary),
-          tooltip: '重试',
-          onPressed: () =>
-              ref.read(downloadManagerProvider).valueOrNull?.retry(task.id),
+          tooltip: AppLocalizations.of(context).retry,
+          onPressed:
+              () =>
+                  ref.read(downloadManagerProvider).valueOrNull?.retry(task.id),
         );
       case DownloadStatus.paused:
         return IconButton(
           icon: Icon(Icons.play_arrow_rounded, color: colorScheme.primary),
-          tooltip: '继续',
-          onPressed: () =>
-              ref.read(downloadManagerProvider).valueOrNull?.resume(task.id),
+          tooltip: AppLocalizations.of(context).resume,
+          onPressed:
+              () => ref
+                  .read(downloadManagerProvider)
+                  .valueOrNull
+                  ?.resume(task.id),
         );
     }
   }

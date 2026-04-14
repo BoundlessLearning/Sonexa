@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
+
 class ServerConnectionForm extends StatefulWidget {
   const ServerConnectionForm({
     super.key,
@@ -8,7 +10,8 @@ class ServerConnectionForm extends StatefulWidget {
     this.errorMessage,
   });
 
-  final void Function(String baseUrl, String username, String password) onSubmit;
+  final void Function(String baseUrl, String username, String password)
+  onSubmit;
   final bool isLoading;
   final String? errorMessage;
 
@@ -44,6 +47,7 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     return Form(
       key: _formKey,
@@ -56,19 +60,19 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
             enabled: !widget.isLoading,
             keyboardType: TextInputType.url,
             autocorrect: false,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.link),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.link),
               hintText: 'https://music.example.com',
-              labelText: '服务器地址',
+              labelText: l10n.serverAddress,
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return '请输入服务器地址';
+                return l10n.enterServerAddress;
               }
               final trimmed = value.trim();
               if (!trimmed.startsWith('http://') &&
                   !trimmed.startsWith('https://')) {
-                return '地址必须以 http:// 或 https:// 开头';
+                return l10n.serverAddressProtocolRequired;
               }
               return null;
             },
@@ -78,13 +82,13 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
             controller: _usernameController,
             enabled: !widget.isLoading,
             autocorrect: false,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.person),
-              labelText: '用户名',
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.person),
+              labelText: l10n.username,
             ),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
-                return '请输入用户名';
+                return l10n.enterUsername;
               }
               return null;
             },
@@ -96,7 +100,7 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
             obscureText: _obscurePassword,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.lock),
-              labelText: '密码',
+              labelText: l10n.password,
               suffixIcon: IconButton(
                 icon: Icon(
                   _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -108,7 +112,7 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return '请输入密码';
+                return l10n.enterPassword;
               }
               return null;
             },
@@ -151,16 +155,17 @@ class _ServerConnectionFormState extends State<ServerConnectionForm> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: widget.isLoading
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text('连接', style: TextStyle(fontSize: 16)),
+            child:
+                widget.isLoading
+                    ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                    : Text(l10n.connect, style: const TextStyle(fontSize: 16)),
           ),
         ],
       ),

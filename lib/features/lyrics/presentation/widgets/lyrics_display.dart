@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
 import 'package:sonexa/features/lyrics/presentation/providers/lyrics_provider.dart';
@@ -30,7 +31,7 @@ class LyricsDisplay extends ConsumerWidget {
           '[DIAG][LYRICS] placeholder: request=null',
         ),
       );
-      return const _LyricsPlaceholder(text: '鏆傛棤姝岃瘝');
+      return _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics);
     }
 
     final lyricsAsync = ref.watch(lyricsProvider(lyricsRequest));
@@ -51,7 +52,7 @@ class LyricsDisplay extends ConsumerWidget {
             'error=$error',
           ),
         );
-        return const _LyricsPlaceholder(text: '鏆傛棤姝岃瘝');
+        return _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics);
       },
       data: (lyrics) {
         if (lyrics == null || lyrics.lines.isEmpty) {
@@ -60,7 +61,9 @@ class LyricsDisplay extends ConsumerWidget {
               '[DIAG][LYRICS] placeholder: empty data for songId=${lyricsRequest.songId}',
             ),
           );
-          return const _LyricsPlaceholder(text: '鏆傛棤姝岃瘝');
+          return _LyricsPlaceholder(
+            text: AppLocalizations.of(context).noLyrics,
+          );
         }
 
         return _SyncedLyricsView(
@@ -198,8 +201,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
         continue;
       }
 
-      if (position.itemLeadingEdge <= 0.5 &&
-          position.itemTrailingEdge >= 0.5) {
+      if (position.itemLeadingEdge <= 0.5 && position.itemTrailingEdge >= 0.5) {
         return position.index;
       }
 
@@ -269,10 +271,8 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
       final position = ref.read(positionProvider).valueOrNull ?? Duration.zero;
       final offsetMs = ref.read(currentLyricsOffsetProvider);
-      final effectivePositionMs = (position.inMilliseconds + offsetMs).clamp(
-        0,
-        1 << 31,
-      ).toInt();
+      final effectivePositionMs =
+          (position.inMilliseconds + offsetMs).clamp(0, 1 << 31).toInt();
       final currentIndex = _findCurrentLineIndex(
         widget.lyrics.lines,
         effectivePositionMs,
@@ -343,10 +343,8 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
     final positionAsync = ref.watch(positionProvider);
     final offsetMs = ref.watch(currentLyricsOffsetProvider);
     final position = positionAsync.valueOrNull ?? Duration.zero;
-    final effectivePositionMs = (position.inMilliseconds + offsetMs).clamp(
-      0,
-      1 << 31,
-    ).toInt();
+    final effectivePositionMs =
+        (position.inMilliseconds + offsetMs).clamp(0, 1 << 31).toInt();
     final currentIndex =
         widget.lyrics.isSynced
             ? _findCurrentLineIndex(lines, effectivePositionMs)
@@ -454,9 +452,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
                                   ),
                                 ),
                                 if (hasTranslation) ...[
-                                  const SizedBox(
-                                    height: _lyricsTranslationGap,
-                                  ),
+                                  const SizedBox(height: _lyricsTranslationGap),
                                   AnimatedOpacity(
                                     duration: _lyricsTextAnimationDuration,
                                     curve: Curves.easeOutCubic,

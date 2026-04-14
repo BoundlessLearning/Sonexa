@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:sonexa/core/audio/audio_handler.dart' as ah;
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
@@ -54,6 +55,8 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
   }
 
   Future<void> _showLyricsMenu(Song song) async {
+    final l10n = AppLocalizations.of(context);
+
     final action = await showModalBottomSheet<_LyricsSheetAction>(
       context: context,
       showDragHandle: true,
@@ -64,15 +67,15 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.tune_rounded),
-                title: const Text('调整歌词'),
-                subtitle: const Text('微调歌词与歌曲进度的同步'),
+                title: Text(l10n.adjustLyrics),
+                subtitle: Text(l10n.adjustLyricsDescription),
                 onTap:
                     () => Navigator.of(context).pop(_LyricsSheetAction.adjust),
               ),
               ListTile(
                 leading: const Icon(Icons.swap_horiz_rounded),
-                title: const Text('切换歌词'),
-                subtitle: const Text('重新搜索并替换当前歌词'),
+                title: Text(l10n.switchLyrics),
+                subtitle: Text(l10n.switchLyricsDescription),
                 onTap:
                     () => Navigator.of(
                       context,
@@ -118,6 +121,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
             final offsetAsync = ref.watch(lyricsOffsetProvider(songId));
             final offsetMs = offsetAsync.valueOrNull ?? 0;
             final notifier = ref.read(lyricsOffsetProvider(songId).notifier);
+            final l10n = AppLocalizations.of(context);
 
             Future<void> updateOffset(int nextOffset) async {
               await notifier.setOffset(nextOffset);
@@ -131,14 +135,14 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '歌词校准',
+                      l10n.lyricsCalibration,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _formatLyricsOffsetLabel(offsetMs),
+                      _formatLyricsOffsetLabel(context, offsetMs),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -149,7 +153,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
                       min: -3000,
                       max: 3000,
                       divisions: 60,
-                      label: _formatLyricsOffsetLabel(offsetMs),
+                      label: _formatLyricsOffsetLabel(context, offsetMs),
                       onChanged: (value) => updateOffset(value.round()),
                     ),
                     const SizedBox(height: 8),
@@ -158,22 +162,22 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
                       runSpacing: 8,
                       children: [
                         _OffsetChip(
-                          label: '延后 0.5s',
+                          label: l10n.delayHalfSecond,
                           onTap: () => updateOffset(offsetMs - 500),
                         ),
                         _OffsetChip(
-                          label: '延后 0.1s',
+                          label: l10n.delayTenthSecond,
                           onTap: () => updateOffset(offsetMs - 100),
                         ),
                         _OffsetChip(
-                          label: '提前 0.1s',
+                          label: l10n.advanceTenthSecond,
                           onTap: () => updateOffset(offsetMs + 100),
                         ),
                         _OffsetChip(
-                          label: '提前 0.5s',
+                          label: l10n.advanceHalfSecond,
                           onTap: () => updateOffset(offsetMs + 500),
                         ),
-                        _OffsetChip(label: '重置', onTap: notifier.reset),
+                        _OffsetChip(label: l10n.reset, onTap: notifier.reset),
                       ],
                     ),
                   ],
@@ -234,6 +238,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
     final songId = currentSong?.id;
     final isFavorite = songId != null && favorites.contains(songId);
     final coverUrl = currentMediaItem?.artUri?.toString();
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -251,7 +256,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
           ),
           IconButton(
             icon: const _TwoDotMoreIcon(),
-            tooltip: '更多操作',
+            tooltip: l10n.moreActions,
             onPressed:
                 currentSong == null
                     ? null
@@ -288,7 +293,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
             ),
             const SizedBox(height: 12),
             Text(
-              currentSong?.title ?? '未播放',
+              currentSong?.title ?? l10n.noTrackPlaying,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(
@@ -682,7 +687,10 @@ class _PlaybackControls extends ConsumerWidget {
                       isFavorite
                           ? colorScheme.primary
                           : colorScheme.onSurfaceVariant,
-                  tooltip: isFavorite ? '取消收藏' : '收藏',
+                  tooltip:
+                      isFavorite
+                          ? AppLocalizations.of(context).unfavorite
+                          : AppLocalizations.of(context).favorite,
                 ),
               ),
             ),
@@ -702,20 +710,29 @@ class _PlayModeButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final mode = ref.watch(playModeProvider);
+    final l10n = AppLocalizations.of(context);
 
     final (icon, color, tooltip) = switch (mode) {
       PlayMode.sequential => (
         Icons.arrow_right_alt_rounded,
         colorScheme.onSurfaceVariant,
-        '顺序播放',
+        l10n.sequentialPlay,
       ),
-      PlayMode.shuffle => (Icons.shuffle_rounded, colorScheme.primary, '随机播放'),
+      PlayMode.shuffle => (
+        Icons.shuffle_rounded,
+        colorScheme.primary,
+        l10n.shufflePlay,
+      ),
       PlayMode.repeatOne => (
         Icons.repeat_one_rounded,
         colorScheme.primary,
-        '单曲循环',
+        l10n.repeatOne,
       ),
-      PlayMode.repeatAll => (Icons.repeat_rounded, colorScheme.primary, '列表循环'),
+      PlayMode.repeatAll => (
+        Icons.repeat_rounded,
+        colorScheme.primary,
+        l10n.repeatAll,
+      ),
     };
 
     return IconButton(
@@ -771,15 +788,16 @@ class _SongActionsSheet extends ConsumerWidget {
     final isDownloaded = downloadedPathAsync.valueOrNull != null;
     final isCheckingDownload = downloadedPathAsync.isLoading;
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     Future<void> startDownload() async {
       final manager = await ref.read(downloadManagerProvider.future);
       await manager.enqueueDownload(song);
       ref.invalidate(downloadedSongPathProvider(song.id));
       if (parentContext.mounted) {
-        ScaffoldMessenger.of(
-          parentContext,
-        ).showSnackBar(SnackBar(content: Text('已开始下载 ${song.title}')));
+        ScaffoldMessenger.of(parentContext).showSnackBar(
+          SnackBar(content: Text(l10n.downloadStarted(song.title))),
+        );
       }
     }
 
@@ -869,8 +887,8 @@ class _SongActionsSheet extends ConsumerWidget {
                 children: [
                   _InfoTile(
                     icon: Icons.album_rounded,
-                    label: '专辑',
-                    value: song.album.isEmpty ? '未知专辑' : song.album,
+                    label: l10n.album,
+                    value: song.album.isEmpty ? l10n.unknownAlbum : song.album,
                     onTap:
                         onOpenAlbum == null
                             ? null
@@ -878,8 +896,9 @@ class _SongActionsSheet extends ConsumerWidget {
                   ),
                   _InfoTile(
                     icon: Icons.person_rounded,
-                    label: '歌手',
-                    value: song.artist.isEmpty ? '未知歌手' : song.artist,
+                    label: l10n.artist,
+                    value:
+                        song.artist.isEmpty ? l10n.unknownArtist : song.artist,
                     onTap:
                         onOpenArtist == null
                             ? null
@@ -894,7 +913,9 @@ class _SongActionsSheet extends ConsumerWidget {
                 Expanded(
                   child: FilledButton.tonalIcon(
                     onPressed:
-                        isDownloaded || isCheckingDownload ? null : startDownload,
+                        isDownloaded || isCheckingDownload
+                            ? null
+                            : startDownload,
                     icon: Icon(
                       isDownloaded
                           ? Icons.check_circle_rounded
@@ -902,10 +923,10 @@ class _SongActionsSheet extends ConsumerWidget {
                     ),
                     label: Text(
                       isCheckingDownload
-                          ? '检查中'
+                          ? l10n.checking
                           : isDownloaded
-                              ? '已下载'
-                              : '下载歌曲',
+                          ? l10n.downloaded
+                          : l10n.downloadSong,
                     ),
                   ),
                 ),
@@ -914,7 +935,7 @@ class _SongActionsSheet extends ConsumerWidget {
                   child: FilledButton.tonalIcon(
                     onPressed: openPlaylistPicker,
                     icon: const Icon(Icons.playlist_add_rounded),
-                    label: const Text('添加到歌单'),
+                    label: Text(l10n.addToPlaylistShort),
                   ),
                 ),
               ],
@@ -973,9 +994,10 @@ class _PlaylistPickerDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final playlistsAsync = ref.watch(playlistsProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return AlertDialog(
-      title: const Text('添加到歌单'),
+      title: Text(l10n.addToPlaylistShort),
       content: SizedBox(
         width: 320,
         child: playlistsAsync.when(
@@ -984,12 +1006,12 @@ class _PlaylistPickerDialog extends ConsumerWidget {
                 height: 120,
                 child: Center(child: CircularProgressIndicator()),
               ),
-          error: (error, _) => Text('获取歌单失败: $error'),
+          error: (error, _) => Text(l10n.getPlaylistFailed(error)),
           data: (playlists) {
             if (playlists.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text('暂无歌单，请先创建一个歌单。'),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(l10n.noSongListCreateFirst),
               );
             }
 
@@ -1010,7 +1032,7 @@ class _PlaylistPickerDialog extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text('${playlist.songCount} 首歌曲'),
+                    subtitle: Text(l10n.songCount(playlist.songCount)),
                     onTap: () => _addToPlaylist(context, ref, playlist),
                   );
                 },
@@ -1022,11 +1044,11 @@ class _PlaylistPickerDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         TextButton(
           onPressed: () => _showNewPlaylistDialog(context, ref),
-          child: const Text('新建歌单'),
+          child: Text(l10n.createPlaylist),
         ),
       ],
     );
@@ -1044,32 +1066,39 @@ class _PlaylistPickerDialog extends ConsumerWidget {
           .read(playlistCrudNotifierProvider.notifier)
           .addSongToPlaylist(playlist.id, song.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('已添加到「${playlist.name}」')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).addedToPlaylist(playlist.name),
+            ),
+          ),
+        );
       }
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('添加失败: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).addFailed(error)),
+          ),
+        );
       }
     }
   }
 
   void _showNewPlaylistDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context);
 
     showDialog<void>(
       context: context,
       builder:
           (dialogContext) => AlertDialog(
-            title: const Text('新建歌单'),
+            title: Text(l10n.createPlaylist),
             content: TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(
-                hintText: '歌单名称',
+              decoration: InputDecoration(
+                hintText: l10n.playlistName,
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (_) => _createAndAdd(dialogContext, ref, controller),
@@ -1077,11 +1106,11 @@ class _PlaylistPickerDialog extends ConsumerWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
+                child: Text(l10n.cancel),
               ),
               TextButton(
                 onPressed: () => _createAndAdd(dialogContext, ref, controller),
-                child: const Text('创建并添加'),
+                child: Text(l10n.createAndAdd),
               ),
             ],
           ),
@@ -1109,22 +1138,27 @@ class _PlaylistPickerDialog extends ConsumerWidget {
       ref.invalidate(playlistsProvider);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('创建失败: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).createFailed(error)),
+          ),
+        );
       }
     }
   }
 }
 
-String _formatLyricsOffsetLabel(int offsetMs) {
+String _formatLyricsOffsetLabel(BuildContext context, int offsetMs) {
+  final l10n = AppLocalizations.of(context);
   if (offsetMs == 0) {
-    return '当前无偏移';
+    return l10n.noLyricsOffset;
   }
 
   final hasFraction = offsetMs.abs() % 1000 != 0;
   final seconds = (offsetMs.abs() / 1000).toStringAsFixed(hasFraction ? 1 : 0);
-  return offsetMs > 0 ? '歌词提前 $seconds 秒' : '歌词延后 $seconds 秒';
+  return offsetMs > 0
+      ? l10n.lyricsAdvanced(seconds)
+      : l10n.lyricsDelayed(seconds);
 }
 
 enum _LyricsSheetAction { adjust, switchLyrics }

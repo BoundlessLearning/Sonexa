@@ -2,6 +2,7 @@
   const AppBranding._();
 
   static const name = 'Sonexa';
+  static const chineseName = '音联';
   static const slogan = 'Your music. Anywhere.';
   static const positioning = 'A music player for your own servers.';
   static const description =

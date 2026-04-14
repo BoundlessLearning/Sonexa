@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
@@ -22,6 +23,7 @@ class PlaylistDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final playlistAsync = ref.watch(playlistDetailProvider(playlistId));
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       body: playlistAsync.when(
@@ -42,12 +44,18 @@ class PlaylistDetailPage extends ConsumerWidget {
                 title: Text(playlist.name),
                 actions: [
                   IconButton(
-                    tooltip: '编辑名称',
-                    onPressed: () => _showRenameDialog(context, ref, playlist.id, playlist.name),
+                    tooltip: l10n.editName,
+                    onPressed:
+                        () => _showRenameDialog(
+                          context,
+                          ref,
+                          playlist.id,
+                          playlist.name,
+                        ),
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: '删除播放列表',
+                    tooltip: l10n.deletePlaylist,
                     onPressed: () => _confirmDelete(context, ref, playlist.id),
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -63,10 +71,7 @@ class PlaylistDetailPage extends ConsumerWidget {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black54,
-                            ],
+                            colors: [Colors.transparent, Colors.black54],
                           ),
                         ),
                       ),
@@ -92,25 +97,23 @@ class PlaylistDetailPage extends ConsumerWidget {
                       if (playlist.owner.isNotEmpty)
                         Text(
                           playlist.owner,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       const SizedBox(height: 4),
                       // 歌曲数 · 总时长
                       Text(
                         [
-                          '${playlist.songCount} 首歌曲',
+                          l10n.songCount(playlist.songCount),
                           formatDuration(playlist.duration),
                         ].join(' · '),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       // 备注
                       if (playlist.comment != null &&
@@ -118,12 +121,12 @@ class PlaylistDetailPage extends ConsumerWidget {
                         const SizedBox(height: 8),
                         Text(
                           playlist.comment!,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ],
@@ -136,11 +139,12 @@ class PlaylistDetailPage extends ConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: FilledButton.icon(
-                    onPressed: songs.isEmpty
-                        ? null
-                        : () => _playFromIndex(ref, songs, 0),
+                    onPressed:
+                        songs.isEmpty
+                            ? null
+                            : () => _playFromIndex(ref, songs, 0),
                     icon: const Icon(Icons.play_arrow),
-                    label: const Text('播放全部'),
+                    label: Text(l10n.playAll),
                   ),
                 ),
               ),
@@ -149,11 +153,11 @@ class PlaylistDetailPage extends ConsumerWidget {
 
               // ── 歌曲列表 ──────────────────────────────────
               if (songs.isEmpty)
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('暂无歌曲'),
+                      padding: const EdgeInsets.all(32),
+                      child: Text(l10n.noSongs),
                     ),
                   ),
                 )
@@ -189,14 +193,15 @@ class PlaylistDetailPage extends ConsumerWidget {
       '[OP] playlist_detail_play: startIndex=$index, totalSongs=${songs.length}',
     );
 
-    final items = songs.map((song) {
-      final streamUrl = api.getStreamUrl(
-        song.id,
-        format: song.preferredPlaybackFormat,
-      );
-      final artUrl = api.getCoverArtUrl(song.coverArtId);
-      return song.toMediaItem(streamUrl, artUrl);
-    }).toList();
+    final items =
+        songs.map((song) {
+          final streamUrl = api.getStreamUrl(
+            song.id,
+            format: song.preferredPlaybackFormat,
+          );
+          final artUrl = api.getCoverArtUrl(song.coverArtId);
+          return song.toMediaItem(streamUrl, artUrl);
+        }).toList();
 
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
@@ -214,8 +219,7 @@ class PlaylistDetailPage extends ConsumerWidget {
           SliverAppBar.large(
             expandedHeight: 320,
             flexibleSpace: FlexibleSpaceBar(
-              background:
-                  Container(color: colorScheme.surfaceContainerHighest),
+              background: Container(color: colorScheme.surfaceContainerHighest),
             ),
           ),
           SliverToBoxAdapter(
@@ -311,7 +315,7 @@ class PlaylistDetailPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '加载失败',
+            AppLocalizations.of(context).failedToLoad,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
@@ -325,7 +329,7 @@ class PlaylistDetailPage extends ConsumerWidget {
             onPressed: () {
               ref.invalidate(playlistDetailProvider(playlistId));
             },
-            child: const Text('重试'),
+            child: Text(AppLocalizations.of(context).retry),
           ),
         ],
       ),
@@ -339,39 +343,42 @@ class PlaylistDetailPage extends ConsumerWidget {
     String initialName,
   ) async {
     final controller = TextEditingController(text: initialName);
+    final l10n = AppLocalizations.of(context);
 
     try {
       final name = await showDialog<String>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('编辑播放列表'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              labelText: '播放列表名称',
+        builder:
+            (dialogContext) => AlertDialog(
+              title: Text(l10n.editPlaylist),
+              content: TextField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(labelText: l10n.playlistName),
+                onSubmitted: (value) {
+                  Navigator.of(dialogContext).pop(value.trim());
+                },
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(controller.text.trim());
+                  },
+                  child: Text(l10n.save),
+                ),
+              ],
             ),
-            onSubmitted: (value) {
-              Navigator.of(dialogContext).pop(value.trim());
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(controller.text.trim());
-              },
-              child: const Text('保存'),
-            ),
-          ],
-        ),
       );
 
-      if (name == null || name.isEmpty || name == initialName || !context.mounted) {
+      if (name == null ||
+          name.isEmpty ||
+          name == initialName ||
+          !context.mounted) {
         return;
       }
 
@@ -384,14 +391,14 @@ class PlaylistDetailPage extends ConsumerWidget {
 
       if (crudState.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('更新失败：${crudState.error}')),
+          SnackBar(content: Text(l10n.updateFailed(crudState.error ?? ''))),
         );
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('播放列表已更新')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.playlistUpdated)));
     } finally {
       controller.dispose();
     }
@@ -402,43 +409,47 @@ class PlaylistDetailPage extends ConsumerWidget {
     WidgetRef ref,
     String playlistId,
   ) async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('删除播放列表'),
-        content: const Text('删除后无法恢复，确定继续吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text(l10n.deletePlaylist),
+            content: Text(l10n.deleteCannotUndo),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.delete),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true || !context.mounted) {
       return;
     }
 
-    await ref.read(playlistCrudNotifierProvider.notifier).deletePlaylist(playlistId);
+    await ref
+        .read(playlistCrudNotifierProvider.notifier)
+        .deletePlaylist(playlistId);
     final crudState = ref.read(playlistCrudNotifierProvider);
     if (!context.mounted) return;
 
     if (crudState.hasError) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：${crudState.error}')),
+        SnackBar(content: Text(l10n.deleteFailed(crudState.error ?? ''))),
       );
       return;
     }
 
     ref.invalidate(playlistDetailProvider(playlistId));
     context.pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('播放列表已删除')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.playlistDeleted)));
   }
 }

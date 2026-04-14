@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
@@ -26,6 +27,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
   Widget build(BuildContext context) {
     final artistAsync = ref.watch(artistDetailProvider(widget.artistId));
     final albumsAsync = ref.watch(artistAlbumsProvider(widget.artistId));
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       body: artistAsync.when(
@@ -37,8 +39,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
           final coverUrl = api.getCoverArtUrl(artist.coverArtId, size: 600);
 
           // 通过艺术家名称获取热门歌曲
-          final topSongsAsync =
-              ref.watch(artistTopSongsProvider(artist.name));
+          final topSongsAsync = ref.watch(artistTopSongsProvider(artist.name));
 
           return CustomScrollView(
             slivers: [
@@ -62,10 +63,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black54,
-                            ],
+                            colors: [Colors.transparent, Colors.black54],
                           ),
                         ),
                       ),
@@ -79,11 +77,10 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Text(
-                    '${artist.albumCount} 张专辑',
+                    l10n.albumCount(artist.albumCount),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
@@ -93,10 +90,10 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Text(
-                    '热门歌曲',
+                    l10n.topSongs,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -104,32 +101,34 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
               // ── 热门歌曲列表（最多 10 首）──────────────────────
               topSongsAsync.when(
                 loading: () => _buildSongListShimmer(context),
-                error: (error, stack) => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      '无法加载热门歌曲',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                error:
+                    (error, stack) => SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          l10n.topSongsLoadFailed,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
                 data: (songs) {
                   if (songs.isEmpty) {
                     return SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          '暂无热门歌曲',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                          l10n.noTopSongs,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     );
@@ -139,8 +138,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                     itemCount: songs.length,
                     itemBuilder: (context, index) {
                       final song = songs[index];
-                      final songCoverUrl =
-                          api.getCoverArtUrl(song.coverArtId);
+                      final songCoverUrl = api.getCoverArtUrl(song.coverArtId);
 
                       return SongListTile(
                         song: song,
@@ -157,10 +155,10 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                   child: Text(
-                    '专辑',
+                    l10n.albums,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -168,32 +166,34 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
               // ── 专辑网格（2 列）──────────────────────────────
               albumsAsync.when(
                 loading: () => _buildAlbumGridShimmer(context),
-                error: (error, stack) => SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      '无法加载专辑',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
+                error:
+                    (error, stack) => SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          l10n.albumsLoadFailed,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
                 data: (albums) {
                   if (albums.isEmpty) {
                     return SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          '暂无专辑',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                          l10n.noAlbums,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     );
@@ -204,24 +204,24 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
                     sliver: SliverGrid.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.78,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.78,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
                       itemCount: albums.length,
                       itemBuilder: (context, index) {
                         final album = albums[index];
-                        final albumCoverUrl =
-                            api.getCoverArtUrl(album.coverArtId);
+                        final albumCoverUrl = api.getCoverArtUrl(
+                          album.coverArtId,
+                        );
 
                         return AlbumGridTile(
                           album: album,
                           coverArtUrl: albumCoverUrl,
                           heroTag: 'album-cover-${album.id}',
-                          onTap: () => context.push(
-                            '/library/album/${album.id}',
-                          ),
+                          onTap:
+                              () => context.push('/library/album/${album.id}'),
                         );
                       },
                     ),
@@ -230,9 +230,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
               ),
 
               // 底部留白（给迷你播放器让位）
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           );
         },
@@ -245,14 +243,15 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
     final api = ref.read(subsonicApiClientProvider).requireValue;
     final audioHandler = ref.read(audioHandlerProvider);
 
-    final items = songs.map((song) {
-      final streamUrl = api.getStreamUrl(
-        song.id,
-        format: song.preferredPlaybackFormat,
-      );
-      final artUrl = api.getCoverArtUrl(song.coverArtId);
-      return song.toMediaItem(streamUrl, artUrl);
-    }).toList();
+    final items =
+        songs.map((song) {
+          final streamUrl = api.getStreamUrl(
+            song.id,
+            format: song.preferredPlaybackFormat,
+          );
+          final artUrl = api.getCoverArtUrl(song.coverArtId);
+          return song.toMediaItem(streamUrl, artUrl);
+        }).toList();
 
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
@@ -409,7 +408,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            '加载失败',
+            AppLocalizations.of(context).failedToLoad,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
@@ -424,7 +423,7 @@ class _ArtistDetailPageState extends ConsumerState<ArtistDetailPage> {
               ref.invalidate(artistDetailProvider(widget.artistId));
               ref.invalidate(artistAlbumsProvider(widget.artistId));
             },
-            child: const Text('重试'),
+            child: Text(AppLocalizations.of(context).retry),
           ),
         ],
       ),

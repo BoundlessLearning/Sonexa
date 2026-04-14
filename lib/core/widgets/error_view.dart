@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
+
 /// 通用错误状态组件 — 居中展示错误图标、标题、可选消息和重试按钮
 class ErrorView extends StatelessWidget {
   const ErrorView({
@@ -22,6 +24,7 @@ class ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Center(
       child: Padding(
@@ -29,16 +32,9 @@ class ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 48,
-              color: colorScheme.error,
-            ),
+            Icon(icon, size: 48, color: colorScheme.error),
             const SizedBox(height: 16),
-            Text(
-              '加载失败',
-              style: textTheme.titleMedium,
-            ),
+            Text(l10n.failedToLoad, style: textTheme.titleMedium),
             if (message != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -53,10 +49,7 @@ class ErrorView extends StatelessWidget {
             ],
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              FilledButton.tonal(
-                onPressed: onRetry,
-                child: const Text('重试'),
-              ),
+              FilledButton.tonal(onPressed: onRetry, child: Text(l10n.retry)),
             ],
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/theme/page_transitions.dart';
 import 'package:sonexa/features/auth/presentation/pages/login_page.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
@@ -57,10 +58,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           // 首页
           StatefulShellBranch(
             routes: [
-              GoRoute(
-                path: '/',
-                builder: (context, state) => const HomePage(),
-              ),
+              GoRoute(path: '/', builder: (context, state) => const HomePage()),
             ],
           ),
           // 音乐库
@@ -72,21 +70,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'album/:id',
-                    builder: (context, state) => AlbumDetailPage(
-                      albumId: state.pathParameters['id']!,
-                    ),
+                    builder:
+                        (context, state) => AlbumDetailPage(
+                          albumId: state.pathParameters['id']!,
+                        ),
                   ),
                   GoRoute(
                     path: 'artist/:id',
-                    builder: (context, state) => ArtistDetailPage(
-                      artistId: state.pathParameters['id']!,
-                    ),
+                    builder:
+                        (context, state) => ArtistDetailPage(
+                          artistId: state.pathParameters['id']!,
+                        ),
                   ),
                   GoRoute(
                     path: 'playlist/:id',
-                    builder: (context, state) => PlaylistDetailPage(
-                      playlistId: state.pathParameters['id']!,
-                    ),
+                    builder:
+                        (context, state) => PlaylistDetailPage(
+                          playlistId: state.pathParameters['id']!,
+                        ),
                   ),
                 ],
               ),
@@ -112,93 +113,107 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginPage(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(
         path: '/now-playing',
-        pageBuilder: (context, state) => slideUpTransition(
-          key: state.pageKey,
-          child: const NowPlayingPage(),
-        ),
+        pageBuilder:
+            (context, state) => slideUpTransition(
+              key: state.pageKey,
+              child: const NowPlayingPage(),
+            ),
       ),
       GoRoute(
         path: '/queue',
-        pageBuilder: (context, state) => slideUpTransition(
-          key: state.pageKey,
-          child: const QueuePage(),
-        ),
+        pageBuilder:
+            (context, state) =>
+                slideUpTransition(key: state.pageKey, child: const QueuePage()),
       ),
       GoRoute(
         path: '/history',
-        pageBuilder: (context, state) => fadeTransition(
-          key: state.pageKey,
-          child: const PlayHistoryPage(),
-        ),
+        pageBuilder:
+            (context, state) => fadeTransition(
+              key: state.pageKey,
+              child: const PlayHistoryPage(),
+            ),
       ),
       GoRoute(
         path: '/downloads',
-        pageBuilder: (context, state) => fadeTransition(
-          key: state.pageKey,
-          child: const DownloadsPage(),
-        ),
+        pageBuilder:
+            (context, state) => fadeTransition(
+              key: state.pageKey,
+              child: const DownloadsPage(),
+            ),
       ),
       GoRoute(
         path: '/album-songs/:id',
-        pageBuilder: (context, state) => fadeTransition(
-          key: ValueKey(
-            'album-songs-${state.pathParameters['id']}-${state.uri.query}',
-          ),
-          child: FilteredSongListPage.album(
-            albumId: state.pathParameters['id']!,
-            title: state.uri.queryParameters['title'] ?? '专辑歌曲',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final l10n = AppLocalizations.of(context);
+          return fadeTransition(
+            key: ValueKey(
+              'album-songs-${state.pathParameters['id']}-${state.uri.query}',
+            ),
+            child: FilteredSongListPage.album(
+              albumId: state.pathParameters['id']!,
+              title: state.uri.queryParameters['title'] ?? l10n.albumSongs,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/artist-songs',
-        pageBuilder: (context, state) => fadeTransition(
-          key: ValueKey('artist-songs-${state.uri.query}'),
-          child: FilteredSongListPage.artist(
-            artistId: state.uri.queryParameters['artistId'] ?? '',
-            artistName: state.uri.queryParameters['artistName'] ?? '',
-            title: state.uri.queryParameters['title'] ?? '歌手歌曲',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final l10n = AppLocalizations.of(context);
+          return fadeTransition(
+            key: ValueKey('artist-songs-${state.uri.query}'),
+            child: FilteredSongListPage.artist(
+              artistId: state.uri.queryParameters['artistId'] ?? '',
+              artistName: state.uri.queryParameters['artistName'] ?? '',
+              title: state.uri.queryParameters['title'] ?? l10n.artistSongs,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/random-songs',
-        pageBuilder: (context, state) => fadeTransition(
-          key: state.pageKey,
-          child: SongListPage(
-            title: '随机推荐',
-            provider: homeRandomSongsProvider,
-            emptyMessage: '暂无推荐',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final l10n = AppLocalizations.of(context);
+          return fadeTransition(
+            key: state.pageKey,
+            child: SongListPage(
+              title: l10n.randomSongs,
+              provider: homeRandomSongsProvider,
+              emptyMessage: l10n.noRandomSongs,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/starred-songs',
-        pageBuilder: (context, state) => fadeTransition(
-          key: state.pageKey,
-          child: SongListPage(
-            title: '我的收藏',
-            provider: starredSongsProvider,
-            emptyMessage: '暂无收藏歌曲',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final l10n = AppLocalizations.of(context);
+          return fadeTransition(
+            key: state.pageKey,
+            child: SongListPage(
+              title: l10n.starredSongs,
+              provider: starredSongsProvider,
+              emptyMessage: l10n.noStarredSongs,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/similar-songs',
-        pageBuilder: (context, state) => fadeTransition(
-          key: state.pageKey,
-          child: SongListPage(
-            title: '猜你喜欢',
-            provider: similarSongsProvider,
-            emptyMessage: '暂无相似推荐',
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final l10n = AppLocalizations.of(context);
+          return fadeTransition(
+            key: state.pageKey,
+            child: SongListPage(
+              title: l10n.similarSongs,
+              provider: similarSongsProvider,
+              emptyMessage: l10n.noSimilarSongs,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: '/lyrics-search',
@@ -225,12 +240,11 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
     return Scaffold(
       body: Column(
-        children: [
-          Expanded(child: navigationShell),
-          const MiniPlayer(),
-        ],
+        children: [Expanded(child: navigationShell), const MiniPlayer()],
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -241,22 +255,22 @@ class AppShell extends StatelessWidget {
             initialLocation: index == navigationShell.currentIndex,
           );
         },
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: '首页',
+            icon: const Icon(Icons.home),
+            label: l10n.homeTab,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.library_music),
-            label: '音乐库',
+            icon: const Icon(Icons.library_music),
+            label: l10n.libraryTab,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: '搜索',
+            icon: const Icon(Icons.search),
+            label: l10n.searchTab,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: '设置',
+            icon: const Icon(Icons.settings),
+            label: l10n.settingsTab,
           ),
         ],
       ),

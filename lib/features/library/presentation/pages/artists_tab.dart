@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
@@ -11,34 +12,36 @@ class ArtistsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final artistsAsync = ref.watch(artistListProvider);
+    final l10n = AppLocalizations.of(context);
 
     return artistsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
+      error:
+          (error, stack) => Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.failedToLoad,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.tonal(
+                  onPressed: () => ref.invalidate(artistListProvider),
+                  child: Text(l10n.retry),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '加载失败',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: () => ref.invalidate(artistListProvider),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      ),
+          ),
       data: (artists) {
         if (artists.isEmpty) {
-          return const Center(child: Text('暂无艺术家'));
+          return Center(child: Text(l10n.noArtists));
         }
 
         // 获取 API 客户端用于封面 URL
@@ -57,11 +60,7 @@ class ArtistsTab extends ConsumerWidget {
 
               return ListTile(
                 leading: ClipOval(
-                  child: AppImage(
-                    url: coverUrl,
-                    size: 44,
-                    borderRadius: 22,
-                  ),
+                  child: AppImage(url: coverUrl, size: 44, borderRadius: 22),
                 ),
                 title: Text(
                   artist.name,
@@ -70,7 +69,7 @@ class ArtistsTab extends ConsumerWidget {
                   style: textTheme.bodyLarge,
                 ),
                 subtitle: Text(
-                  '${artist.albumCount} 张专辑',
+                  l10n.albumCount(artist.albumCount),
                   style: textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

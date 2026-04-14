@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 import 'package:sonexa/features/library/domain/entities/playlist.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
@@ -39,6 +40,7 @@ class SongContextMenu {
     final favorites = ref.read(favoritesNotifierProvider);
     final isFavorite = favorites.contains(song.id);
     final isDownloaded = ref.read(isDownloadedProvider(song.id));
+    final l10n = AppLocalizations.of(context);
 
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final result = await showMenu<_MenuAction>(
@@ -48,11 +50,11 @@ class SongContextMenu {
         Offset.zero & overlay.size,
       ),
       items: [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: _MenuAction.addToPlaylist,
           child: ListTile(
-            leading: Icon(Icons.playlist_add_rounded),
-            title: Text('添加到播放列表'),
+            leading: const Icon(Icons.playlist_add_rounded),
+            title: Text(l10n.addToPlaylist),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -65,17 +67,17 @@ class SongContextMenu {
                   ? Icons.favorite_rounded
                   : Icons.favorite_border_rounded,
             ),
-            title: Text(isFavorite ? '取消收藏' : '收藏'),
+            title: Text(isFavorite ? l10n.unfavorite : l10n.favorite),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
         ),
         if (!isDownloaded)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: _MenuAction.download,
             child: ListTile(
-              leading: Icon(Icons.download_rounded),
-              title: Text('下载'),
+              leading: const Icon(Icons.download_rounded),
+              title: Text(l10n.download),
               dense: true,
               contentPadding: EdgeInsets.zero,
             ),
@@ -97,6 +99,7 @@ class SongContextMenu {
     final favorites = ref.read(favoritesNotifierProvider);
     final isFavorite = favorites.contains(song.id);
     final isDownloaded = ref.read(isDownloadedProvider(song.id));
+    final l10n = AppLocalizations.of(context);
 
     showModalBottomSheet<_MenuAction>(
       context: context,
@@ -114,8 +117,8 @@ class SongContextMenu {
                 child: Text(
                   song.title,
                   style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -123,18 +126,17 @@ class SongContextMenu {
               Text(
                 song.artist,
                 style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(sheetContext)
-                          .colorScheme
-                          .onSurfaceVariant,
-                    ),
+                  color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.playlist_add_rounded),
-                title: const Text('添加到播放列表'),
-                onTap: () =>
-                    Navigator.pop(sheetContext, _MenuAction.addToPlaylist),
+                title: Text(l10n.addToPlaylist),
+                onTap:
+                    () =>
+                        Navigator.pop(sheetContext, _MenuAction.addToPlaylist),
               ),
               ListTile(
                 leading: Icon(
@@ -142,16 +144,17 @@ class SongContextMenu {
                       ? Icons.favorite_rounded
                       : Icons.favorite_border_rounded,
                 ),
-                title: Text(isFavorite ? '取消收藏' : '收藏'),
-                onTap: () =>
-                    Navigator.pop(sheetContext, _MenuAction.toggleFavorite),
+                title: Text(isFavorite ? l10n.unfavorite : l10n.favorite),
+                onTap:
+                    () =>
+                        Navigator.pop(sheetContext, _MenuAction.toggleFavorite),
               ),
               if (!isDownloaded)
                 ListTile(
                   leading: const Icon(Icons.download_rounded),
-                  title: const Text('下载'),
-                  onTap: () =>
-                      Navigator.pop(sheetContext, _MenuAction.download),
+                  title: Text(l10n.download),
+                  onTap:
+                      () => Navigator.pop(sheetContext, _MenuAction.download),
                 ),
               const SizedBox(height: 8),
             ],
@@ -182,7 +185,11 @@ class SongContextMenu {
         if (manager == null) return;
         manager.enqueueDownload(song);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已开始下载: ${song.title}')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).downloadStarted(song.title),
+            ),
+          ),
         );
     }
   }
@@ -212,22 +219,24 @@ class _PlaylistPickerDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final playlistsAsync = ref.watch(playlistsProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return AlertDialog(
-      title: const Text('添加到播放列表'),
+      title: Text(l10n.addToPlaylist),
       content: SizedBox(
         width: 320,
         child: playlistsAsync.when(
-          loading: () => const SizedBox(
-            height: 100,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => Text('获取播放列表失败: $e'),
+          loading:
+              () => const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          error: (e, _) => Text(l10n.getPlaylistFailed(e)),
           data: (playlists) {
             if (playlists.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text('暂无播放列表，请先创建一个。'),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(l10n.noPlaylistCreateFirst),
               );
             }
             return ConstrainedBox(
@@ -247,12 +256,9 @@ class _PlaylistPickerDialog extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: Text('${playlist.songCount} 首歌曲'),
-                    onTap: () => _addToPlaylist(
-                      context,
-                      ref,
-                      playlist: playlist,
-                    ),
+                    subtitle: Text(l10n.songCount(playlist.songCount)),
+                    onTap:
+                        () => _addToPlaylist(context, ref, playlist: playlist),
                   );
                 },
               ),
@@ -263,11 +269,11 @@ class _PlaylistPickerDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n.cancel),
         ),
         TextButton(
           onPressed: () => _showNewPlaylistDialog(context, ref),
-          child: const Text('新建播放列表'),
+          child: Text(l10n.createPlaylist),
         ),
       ],
     );
@@ -287,13 +293,17 @@ class _PlaylistPickerDialog extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已添加到「${playlist.name}」')),
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(context).addedToPlaylist(playlist.name),
+            ),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('添加失败: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context).addFailed(e))),
         );
       }
     }
@@ -301,31 +311,33 @@ class _PlaylistPickerDialog extends ConsumerWidget {
 
   void _showNewPlaylistDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context);
 
     showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('新建播放列表'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '播放列表名称',
-            border: OutlineInputBorder(),
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text(l10n.createPlaylist),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: l10n.playlistName,
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _createAndAdd(dialogContext, ref, controller),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(l10n.cancel),
+              ),
+              TextButton(
+                onPressed: () => _createAndAdd(dialogContext, ref, controller),
+                child: Text(l10n.createAndAdd),
+              ),
+            ],
           ),
-          onSubmitted: (_) => _createAndAdd(dialogContext, ref, controller),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => _createAndAdd(dialogContext, ref, controller),
-            child: const Text('创建并添加'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -351,13 +363,15 @@ class _PlaylistPickerDialog extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已创建「$name」并添加歌曲')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context).createdAndAdded(name)),
+          ),
         );
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context).createFailed(e))),
         );
       }
     }

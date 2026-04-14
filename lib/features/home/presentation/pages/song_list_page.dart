@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
@@ -24,32 +25,34 @@ class SongListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final songsAsync = ref.watch(provider);
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       body: songsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('加载失败: $error'),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(provider),
-                child: const Text('重试'),
+        error:
+            (error, _) => Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.loadFailed(error)),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => ref.invalidate(provider),
+                    child: Text(l10n.retry),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
         data: (songs) {
           if (songs.isEmpty) {
             return Center(
               child: Text(
                 emptyMessage,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             );
           }
@@ -60,8 +63,7 @@ class SongListPage extends ConsumerWidget {
             itemBuilder: (context, index) {
               final song = songs[index];
               final api = ref.read(subsonicApiClientProvider).valueOrNull;
-              final coverUrl =
-                  api?.getCoverArtUrl(song.coverArtId, size: 300);
+              final coverUrl = api?.getCoverArtUrl(song.coverArtId, size: 300);
 
               return SongListTile(
                 song: song,
@@ -79,12 +81,15 @@ class SongListPage extends ConsumerWidget {
     final api = ref.read(subsonicApiClientProvider).valueOrNull;
     if (api == null) return;
     final audioHandler = ref.read(audioHandlerProvider);
-    final items = songs
-        .map((s) => s.toMediaItem(
-              api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
-              api.getCoverArtUrl(s.coverArtId, size: 300),
-            ))
-        .toList();
+    final items =
+        songs
+            .map(
+              (s) => s.toMediaItem(
+                api.getStreamUrl(s.id, format: s.preferredPlaybackFormat),
+                api.getCoverArtUrl(s.coverArtId, size: 300),
+              ),
+            )
+            .toList();
     audioHandler.loadAndPlay(items, initialIndex: index);
   }
 }

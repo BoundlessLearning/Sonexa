@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sonexa/core/audio/media_item_converter.dart';
+import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
@@ -62,46 +63,49 @@ class _SongsTabState extends ConsumerState<SongsTab> {
   @override
   Widget build(BuildContext context) {
     final songsAsync = ref.watch(paginatedSongsProvider);
+    final l10n = AppLocalizations.of(context);
 
     return songsAsync.when(
       loading: () => _buildShimmerList(context),
-      error: (error, stack) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
+      error:
+          (error, stack) => Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.failedToLoad,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.tonal(
+                  onPressed:
+                      () => ref.read(paginatedSongsProvider.notifier).refresh(),
+                  child: Text(l10n.retry),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '加载失败',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.tonal(
-              onPressed: () => ref.read(paginatedSongsProvider.notifier).refresh(),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
-      ),
+          ),
       data: (songs) {
         if (songs.isEmpty) {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 240),
-                Center(child: Text('暂无歌曲')),
+              children: [
+                const SizedBox(height: 240),
+                Center(child: Text(l10n.noSongs)),
               ],
             ),
           );
@@ -121,18 +125,21 @@ class _SongsTabState extends ConsumerState<SongsTab> {
               if (index == songs.length) {
                 return AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
-                  child: _isLoadingMore
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.5),
+                  child:
+                      _isLoadingMore
+                          ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                ),
+                              ),
                             ),
-                          ),
-                        )
-                      : hasMore
+                          )
+                          : hasMore
                           ? const SizedBox(height: 24)
                           : const SizedBox(height: 12),
                 );
@@ -145,15 +152,18 @@ class _SongsTabState extends ConsumerState<SongsTab> {
                 coverArtUrl: api.getCoverArtUrl(song.coverArtId),
                 onTap: () {
                   final audioHandler = ref.read(audioHandlerProvider);
-                  final items = songs
-                      .map((s) => s.toMediaItem(
-                            api.getStreamUrl(
-                              s.id,
-                              format: s.preferredPlaybackFormat,
+                  final items =
+                      songs
+                          .map(
+                            (s) => s.toMediaItem(
+                              api.getStreamUrl(
+                                s.id,
+                                format: s.preferredPlaybackFormat,
+                              ),
+                              api.getCoverArtUrl(s.coverArtId),
                             ),
-                            api.getCoverArtUrl(s.coverArtId),
-                          ))
-                      .toList();
+                          )
+                          .toList();
                   audioHandler.loadAndPlay(items, initialIndex: index);
                 },
               );
