@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:sonexa/core/constants/app_branding.dart';
+import 'package:sonexa/core/error/app_error.dart';
 
 enum AppLanguage {
   system,
@@ -286,6 +287,90 @@ class AppLocalizations {
   String get enterUsername => text('请输入用户名', 'Please enter your username');
   String get enterPassword => text('请输入密码', 'Please enter your password');
   String get connect => text('连接', 'Connect');
+  String appErrorMessage(AppError error) {
+    final detail = error.message;
+    return switch (error.code) {
+      AppErrorCode.connectionTimeout => text(
+        '连接超时，请检查服务器地址是否可访问',
+        'Connection timed out. Check whether the server URL is reachable.',
+      ),
+      AppErrorCode.receiveTimeout => text(
+        '服务器响应超时，请稍后重试',
+        'The server took too long to respond. Try again later.',
+      ),
+      AppErrorCode.networkConnectivity => text(
+        '无法连接到服务器，请检查网络和服务器地址',
+        'Could not connect to the server. Check your network and server URL.',
+      ),
+      AppErrorCode.sslCertificate => text(
+        'SSL 证书验证失败，请检查服务器证书配置',
+        'SSL certificate verification failed. Check the server certificate.',
+      ),
+      AppErrorCode.invalidCredentials => text(
+        '用户名或密码错误',
+        'Incorrect username or password.',
+      ),
+      AppErrorCode.userNotAuthorized => text(
+        '该用户没有访问权限',
+        'This user is not authorized.',
+      ),
+      AppErrorCode.authenticationFailed => text(
+        '认证失败，请检查用户名和密码',
+        'Authentication failed. Check your username and password.',
+      ),
+      AppErrorCode.serverError => _errorWithDetail(
+        zh: '服务器错误',
+        en: 'Server error',
+        detail: detail,
+      ),
+      AppErrorCode.connectionFailed => _errorWithDetail(
+        zh: '连接失败',
+        en: 'Connection failed',
+        detail: detail,
+      ),
+      AppErrorCode.downloadCancelled => text('下载已取消', 'Download cancelled'),
+      AppErrorCode.downloadFileMissingOrInvalid => text(
+        '下载文件缺失或无效',
+        'Downloaded file is missing or invalid.',
+      ),
+      AppErrorCode.downloadFileMissing => text(
+        '下载文件不存在',
+        'Downloaded file does not exist.',
+      ),
+      AppErrorCode.downloadFileEmpty => text(
+        '下载文件为空',
+        'Downloaded file is empty.',
+      ),
+      AppErrorCode.downloadFileSizeMismatch => text(
+        '下载文件大小不匹配',
+        'Downloaded file size mismatch.',
+      ),
+      AppErrorCode.unknown => _errorWithDetail(
+        zh: '未知错误',
+        en: 'Unknown error',
+        detail: detail,
+      ),
+    };
+  }
+
+  String errorMessageFromStorageValue(String? value) {
+    final error = AppError.fromStorageValue(value);
+    if (error == null) {
+      return value ?? failedStatus;
+    }
+    return appErrorMessage(error);
+  }
+
+  String _errorWithDetail({
+    required String zh,
+    required String en,
+    String? detail,
+  }) {
+    if (detail == null || detail.isEmpty) {
+      return text(zh, en);
+    }
+    return text('$zh：$detail', '$en: $detail');
+  }
 }
 
 class _AppLocalizationsDelegate

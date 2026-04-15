@@ -49,7 +49,10 @@ class LoginPage extends ConsumerWidget {
                 const SizedBox(height: 40),
                 ServerConnectionForm(
                   isLoading: authState.isLoading,
-                  errorMessage: authState.error,
+                  errorMessage:
+                      authState.error == null
+                          ? null
+                          : l10n.appErrorMessage(authState.error!),
                   onSubmit: (baseUrl, username, password) {
                     ref
                         .read(authStateProvider.notifier)

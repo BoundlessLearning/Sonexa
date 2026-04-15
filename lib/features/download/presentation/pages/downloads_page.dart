@@ -297,7 +297,7 @@ class _DownloadTaskTile extends ConsumerWidget {
       case DownloadStatus.completed:
         return l10n.completedStatus;
       case DownloadStatus.failed:
-        return task.error ?? l10n.failedStatus;
+        return l10n.errorMessageFromStorageValue(task.error);
       case DownloadStatus.pending:
         return l10n.pendingStatus;
       case DownloadStatus.paused:
