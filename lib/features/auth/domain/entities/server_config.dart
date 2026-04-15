@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'server_config.freezed.dart';
 part 'server_config.g.dart';
 
-@freezed
+@Freezed(toStringOverride: false)
 abstract class ServerConfig with _$ServerConfig {
   const factory ServerConfig({
     required String id,
@@ -14,5 +14,6 @@ abstract class ServerConfig with _$ServerConfig {
     DateTime? lastConnected,
   }) = _ServerConfig;
 
-  factory ServerConfig.fromJson(Map<String, dynamic> json) => _$ServerConfigFromJson(json);
+  factory ServerConfig.fromJson(Map<String, dynamic> json) =>
+      _$ServerConfigFromJson(json);
 }

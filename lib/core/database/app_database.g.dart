@@ -4529,18 +4529,18 @@ class $ServerConfigsTable extends ServerConfigs
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _encryptedPasswordMeta = const VerificationMeta(
-    'encryptedPassword',
+  static const VerificationMeta _passwordMeta = const VerificationMeta(
+    'password',
   );
   @override
-  late final GeneratedColumn<String> encryptedPassword =
-      GeneratedColumn<String>(
-        'encrypted_password',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: true,
-      );
+  late final GeneratedColumn<String> password = GeneratedColumn<String>(
+    'password',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _isActiveMeta = const VerificationMeta(
     'isActive',
   );
@@ -4573,7 +4573,7 @@ class $ServerConfigsTable extends ServerConfigs
     id,
     baseUrl,
     username,
-    encryptedPassword,
+    password,
     isActive,
     lastConnected,
   ];
@@ -4610,16 +4610,11 @@ class $ServerConfigsTable extends ServerConfigs
     } else if (isInserting) {
       context.missing(_usernameMeta);
     }
-    if (data.containsKey('encrypted_password')) {
+    if (data.containsKey('password')) {
       context.handle(
-        _encryptedPasswordMeta,
-        encryptedPassword.isAcceptableOrUnknown(
-          data['encrypted_password']!,
-          _encryptedPasswordMeta,
-        ),
+        _passwordMeta,
+        password.isAcceptableOrUnknown(data['password']!, _passwordMeta),
       );
-    } else if (isInserting) {
-      context.missing(_encryptedPasswordMeta);
     }
     if (data.containsKey('is_active')) {
       context.handle(
@@ -4660,10 +4655,10 @@ class $ServerConfigsTable extends ServerConfigs
             DriftSqlType.string,
             data['${effectivePrefix}username'],
           )!,
-      encryptedPassword:
+      password:
           attachedDatabase.typeMapping.read(
             DriftSqlType.string,
-            data['${effectivePrefix}encrypted_password'],
+            data['${effectivePrefix}password'],
           )!,
       isActive:
           attachedDatabase.typeMapping.read(
@@ -4687,14 +4682,14 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
   final String id;
   final String baseUrl;
   final String username;
-  final String encryptedPassword;
+  final String password;
   final bool isActive;
   final DateTime? lastConnected;
   const ServerConfig({
     required this.id,
     required this.baseUrl,
     required this.username,
-    required this.encryptedPassword,
+    required this.password,
     required this.isActive,
     this.lastConnected,
   });
@@ -4704,7 +4699,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
     map['id'] = Variable<String>(id);
     map['base_url'] = Variable<String>(baseUrl);
     map['username'] = Variable<String>(username);
-    map['encrypted_password'] = Variable<String>(encryptedPassword);
+    map['password'] = Variable<String>(password);
     map['is_active'] = Variable<bool>(isActive);
     if (!nullToAbsent || lastConnected != null) {
       map['last_connected'] = Variable<DateTime>(lastConnected);
@@ -4717,7 +4712,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
       id: Value(id),
       baseUrl: Value(baseUrl),
       username: Value(username),
-      encryptedPassword: Value(encryptedPassword),
+      password: Value(password),
       isActive: Value(isActive),
       lastConnected:
           lastConnected == null && nullToAbsent
@@ -4735,7 +4730,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
       id: serializer.fromJson<String>(json['id']),
       baseUrl: serializer.fromJson<String>(json['baseUrl']),
       username: serializer.fromJson<String>(json['username']),
-      encryptedPassword: serializer.fromJson<String>(json['encryptedPassword']),
+      password: serializer.fromJson<String>(json['password']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       lastConnected: serializer.fromJson<DateTime?>(json['lastConnected']),
     );
@@ -4747,7 +4742,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
       'id': serializer.toJson<String>(id),
       'baseUrl': serializer.toJson<String>(baseUrl),
       'username': serializer.toJson<String>(username),
-      'encryptedPassword': serializer.toJson<String>(encryptedPassword),
+      'password': serializer.toJson<String>(password),
       'isActive': serializer.toJson<bool>(isActive),
       'lastConnected': serializer.toJson<DateTime?>(lastConnected),
     };
@@ -4757,14 +4752,14 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
     String? id,
     String? baseUrl,
     String? username,
-    String? encryptedPassword,
+    String? password,
     bool? isActive,
     Value<DateTime?> lastConnected = const Value.absent(),
   }) => ServerConfig(
     id: id ?? this.id,
     baseUrl: baseUrl ?? this.baseUrl,
     username: username ?? this.username,
-    encryptedPassword: encryptedPassword ?? this.encryptedPassword,
+    password: password ?? this.password,
     isActive: isActive ?? this.isActive,
     lastConnected:
         lastConnected.present ? lastConnected.value : this.lastConnected,
@@ -4774,10 +4769,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
       id: data.id.present ? data.id.value : this.id,
       baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
       username: data.username.present ? data.username.value : this.username,
-      encryptedPassword:
-          data.encryptedPassword.present
-              ? data.encryptedPassword.value
-              : this.encryptedPassword,
+      password: data.password.present ? data.password.value : this.password,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       lastConnected:
           data.lastConnected.present
@@ -4792,7 +4784,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
           ..write('id: $id, ')
           ..write('baseUrl: $baseUrl, ')
           ..write('username: $username, ')
-          ..write('encryptedPassword: $encryptedPassword, ')
+          ..write('password: $password, ')
           ..write('isActive: $isActive, ')
           ..write('lastConnected: $lastConnected')
           ..write(')'))
@@ -4800,14 +4792,8 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
   }
 
   @override
-  int get hashCode => Object.hash(
-    id,
-    baseUrl,
-    username,
-    encryptedPassword,
-    isActive,
-    lastConnected,
-  );
+  int get hashCode =>
+      Object.hash(id, baseUrl, username, password, isActive, lastConnected);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4815,7 +4801,7 @@ class ServerConfig extends DataClass implements Insertable<ServerConfig> {
           other.id == this.id &&
           other.baseUrl == this.baseUrl &&
           other.username == this.username &&
-          other.encryptedPassword == this.encryptedPassword &&
+          other.password == this.password &&
           other.isActive == this.isActive &&
           other.lastConnected == this.lastConnected);
 }
@@ -4824,7 +4810,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
   final Value<String> id;
   final Value<String> baseUrl;
   final Value<String> username;
-  final Value<String> encryptedPassword;
+  final Value<String> password;
   final Value<bool> isActive;
   final Value<DateTime?> lastConnected;
   final Value<int> rowid;
@@ -4832,7 +4818,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
     this.id = const Value.absent(),
     this.baseUrl = const Value.absent(),
     this.username = const Value.absent(),
-    this.encryptedPassword = const Value.absent(),
+    this.password = const Value.absent(),
     this.isActive = const Value.absent(),
     this.lastConnected = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4841,19 +4827,18 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
     required String id,
     required String baseUrl,
     required String username,
-    required String encryptedPassword,
+    this.password = const Value.absent(),
     this.isActive = const Value.absent(),
     this.lastConnected = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        baseUrl = Value(baseUrl),
-       username = Value(username),
-       encryptedPassword = Value(encryptedPassword);
+       username = Value(username);
   static Insertable<ServerConfig> custom({
     Expression<String>? id,
     Expression<String>? baseUrl,
     Expression<String>? username,
-    Expression<String>? encryptedPassword,
+    Expression<String>? password,
     Expression<bool>? isActive,
     Expression<DateTime>? lastConnected,
     Expression<int>? rowid,
@@ -4862,7 +4847,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
       if (id != null) 'id': id,
       if (baseUrl != null) 'base_url': baseUrl,
       if (username != null) 'username': username,
-      if (encryptedPassword != null) 'encrypted_password': encryptedPassword,
+      if (password != null) 'password': password,
       if (isActive != null) 'is_active': isActive,
       if (lastConnected != null) 'last_connected': lastConnected,
       if (rowid != null) 'rowid': rowid,
@@ -4873,7 +4858,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
     Value<String>? id,
     Value<String>? baseUrl,
     Value<String>? username,
-    Value<String>? encryptedPassword,
+    Value<String>? password,
     Value<bool>? isActive,
     Value<DateTime?>? lastConnected,
     Value<int>? rowid,
@@ -4882,7 +4867,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
       id: id ?? this.id,
       baseUrl: baseUrl ?? this.baseUrl,
       username: username ?? this.username,
-      encryptedPassword: encryptedPassword ?? this.encryptedPassword,
+      password: password ?? this.password,
       isActive: isActive ?? this.isActive,
       lastConnected: lastConnected ?? this.lastConnected,
       rowid: rowid ?? this.rowid,
@@ -4901,8 +4886,8 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
     if (username.present) {
       map['username'] = Variable<String>(username.value);
     }
-    if (encryptedPassword.present) {
-      map['encrypted_password'] = Variable<String>(encryptedPassword.value);
+    if (password.present) {
+      map['password'] = Variable<String>(password.value);
     }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
@@ -4922,7 +4907,7 @@ class ServerConfigsCompanion extends UpdateCompanion<ServerConfig> {
           ..write('id: $id, ')
           ..write('baseUrl: $baseUrl, ')
           ..write('username: $username, ')
-          ..write('encryptedPassword: $encryptedPassword, ')
+          ..write('password: $password, ')
           ..write('isActive: $isActive, ')
           ..write('lastConnected: $lastConnected, ')
           ..write('rowid: $rowid')
@@ -7770,7 +7755,7 @@ typedef $$ServerConfigsTableCreateCompanionBuilder =
       required String id,
       required String baseUrl,
       required String username,
-      required String encryptedPassword,
+      Value<String> password,
       Value<bool> isActive,
       Value<DateTime?> lastConnected,
       Value<int> rowid,
@@ -7780,7 +7765,7 @@ typedef $$ServerConfigsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> baseUrl,
       Value<String> username,
-      Value<String> encryptedPassword,
+      Value<String> password,
       Value<bool> isActive,
       Value<DateTime?> lastConnected,
       Value<int> rowid,
@@ -7810,8 +7795,8 @@ class $$ServerConfigsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get encryptedPassword => $composableBuilder(
-    column: $table.encryptedPassword,
+  ColumnFilters<String> get password => $composableBuilder(
+    column: $table.password,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7850,8 +7835,8 @@ class $$ServerConfigsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get encryptedPassword => $composableBuilder(
-    column: $table.encryptedPassword,
+  ColumnOrderings<String> get password => $composableBuilder(
+    column: $table.password,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -7884,10 +7869,8 @@ class $$ServerConfigsTableAnnotationComposer
   GeneratedColumn<String> get username =>
       $composableBuilder(column: $table.username, builder: (column) => column);
 
-  GeneratedColumn<String> get encryptedPassword => $composableBuilder(
-    column: $table.encryptedPassword,
-    builder: (column) => column,
-  );
+  GeneratedColumn<String> get password =>
+      $composableBuilder(column: $table.password, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
@@ -7936,7 +7919,7 @@ class $$ServerConfigsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> baseUrl = const Value.absent(),
                 Value<String> username = const Value.absent(),
-                Value<String> encryptedPassword = const Value.absent(),
+                Value<String> password = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> lastConnected = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -7944,7 +7927,7 @@ class $$ServerConfigsTableTableManager
                 id: id,
                 baseUrl: baseUrl,
                 username: username,
-                encryptedPassword: encryptedPassword,
+                password: password,
                 isActive: isActive,
                 lastConnected: lastConnected,
                 rowid: rowid,
@@ -7954,7 +7937,7 @@ class $$ServerConfigsTableTableManager
                 required String id,
                 required String baseUrl,
                 required String username,
-                required String encryptedPassword,
+                Value<String> password = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime?> lastConnected = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -7962,7 +7945,7 @@ class $$ServerConfigsTableTableManager
                 id: id,
                 baseUrl: baseUrl,
                 username: username,
-                encryptedPassword: encryptedPassword,
+                password: password,
                 isActive: isActive,
                 lastConnected: lastConnected,
                 rowid: rowid,

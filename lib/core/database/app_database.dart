@@ -72,11 +72,14 @@ class LocalPlaylists extends Table {
 }
 
 class PlaylistSongEntries extends Table {
-  TextColumn get playlistId => text().customConstraint(
-    'REFERENCES local_playlists(id) ON DELETE CASCADE',
-  )();
+  TextColumn get playlistId =>
+      text().customConstraint(
+        'REFERENCES local_playlists(id) ON DELETE CASCADE',
+      )();
   TextColumn get songId =>
-      text().customConstraint('REFERENCES cached_songs(id) ON DELETE CASCADE')();
+      text().customConstraint(
+        'REFERENCES cached_songs(id) ON DELETE CASCADE',
+      )();
   IntColumn get sortOrder => integer()();
   DateTimeColumn get addedAt => dateTime()();
 
@@ -130,7 +133,7 @@ class ServerConfigs extends Table {
   TextColumn get id => text()();
   TextColumn get baseUrl => text()();
   TextColumn get username => text()();
-  TextColumn get encryptedPassword => text()();
+  TextColumn get password => text().withDefault(const Constant(''))();
   BoolColumn get isActive => boolean().withDefault(const Constant(false))();
   DateTimeColumn get lastConnected => dateTime().nullable()();
 
@@ -153,8 +156,35 @@ class ServerConfigs extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'sonexa_db'));
+  AppDatabase({QueryExecutor? executor})
+    : super(executor ?? driftDatabase(name: 'sonexa_db'));
+
+  static const currentSchemaVersion = 2;
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => currentSchemaVersion;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (migrator) => migrator.createAll(),
+    onUpgrade: (migrator, from, to) async {
+      for (var version = from; version < to; version++) {
+        switch (version) {
+          case 1:
+            await migrator.addColumn(serverConfigs, serverConfigs.password);
+            await customStatement(
+              'UPDATE server_configs SET password = encrypted_password',
+            );
+            break;
+          default:
+            throw StateError(
+              'Missing database migration from schema $version to ${version + 1}.',
+            );
+        }
+      }
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+    },
+  );
 }

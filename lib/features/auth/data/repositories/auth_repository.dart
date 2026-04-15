@@ -14,7 +14,11 @@ class AuthRepository {
   static const _uuid = Uuid();
 
   /// 登录并验证服务器连接。成功返回 null，失败返回具体错误信息。
-  Future<String?> login(String baseUrl, String username, String password) async {
+  Future<String?> login(
+    String baseUrl,
+    String username,
+    String password,
+  ) async {
     final dio = createDioClient();
     final client = SubsonicApiClient(
       dio,
@@ -29,16 +33,18 @@ class AuthRepository {
     // ping 成功，保存服务器配置
     final id = _uuid.v4();
     await _db.transaction(() async {
-      await _db.update(_db.serverConfigs).write(
-            const ServerConfigsCompanion(isActive: Value(false)),
-          );
+      await _db
+          .update(_db.serverConfigs)
+          .write(const ServerConfigsCompanion(isActive: Value(false)));
 
-      await _db.into(_db.serverConfigs).insertOnConflictUpdate(
+      await _db
+          .into(_db.serverConfigs)
+          .insertOnConflictUpdate(
             ServerConfigsCompanion.insert(
               id: id,
               baseUrl: baseUrl,
               username: username,
-              encryptedPassword: password,
+              password: Value(password),
               isActive: const Value(true),
               lastConnected: Value(DateTime.now()),
             ),
@@ -49,15 +55,15 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    await _db.update(_db.serverConfigs).write(
-          const ServerConfigsCompanion(isActive: Value(false)),
-        );
+    await _db
+        .update(_db.serverConfigs)
+        .write(const ServerConfigsCompanion(isActive: Value(false)));
   }
 
   Future<entity.ServerConfig?> getActiveServer() async {
-    final row = await (_db.select(_db.serverConfigs)
-          ..where((tbl) => tbl.isActive.equals(true)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.serverConfigs)
+          ..where((tbl) => tbl.isActive.equals(true))).getSingleOrNull();
 
     if (row == null) return null;
     return _toEntity(row);
@@ -70,8 +76,7 @@ class AuthRepository {
 
   Future<void> deleteServer(String id) async {
     await (_db.delete(_db.serverConfigs)
-          ..where((tbl) => tbl.id.equals(id)))
-        .go();
+      ..where((tbl) => tbl.id.equals(id))).go();
   }
 
   entity.ServerConfig _toEntity(ServerConfig row) {
@@ -79,7 +84,7 @@ class AuthRepository {
       id: row.id,
       baseUrl: row.baseUrl,
       username: row.username,
-      password: row.encryptedPassword,
+      password: row.password,
       isActive: row.isActive,
       lastConnected: row.lastConnected,
     );

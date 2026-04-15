@@ -35,10 +35,6 @@ bool operator ==(Object other) {
 @override
 int get hashCode => Object.hash(runtimeType,id,baseUrl,username,password,isActive,lastConnected);
 
-@override
-String toString() {
-  return 'ServerConfig(id: $id, baseUrl: $baseUrl, username: $username, password: $password, isActive: $isActive, lastConnected: $lastConnected)';
-}
 
 
 }
@@ -244,10 +240,6 @@ bool operator ==(Object other) {
 @override
 int get hashCode => Object.hash(runtimeType,id,baseUrl,username,password,isActive,lastConnected);
 
-@override
-String toString() {
-  return 'ServerConfig(id: $id, baseUrl: $baseUrl, username: $username, password: $password, isActive: $isActive, lastConnected: $lastConnected)';
-}
 
 
 }
