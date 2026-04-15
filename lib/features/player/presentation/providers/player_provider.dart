@@ -8,8 +8,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:sonexa/core/audio/audio_handler.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
-import 'package:sonexa/features/player/domain/entities/player_state.dart'
-    as ps;
+import 'package:sonexa/features/player/domain/entities/player_state.dart' as ps;
 
 class _PlaybackTimelineSnapshot {
   const _PlaybackTimelineSnapshot({
@@ -100,11 +99,11 @@ MediaItem? _resolveCurrentMediaItem(
 
   final mediaSongId = mediaItem.extras?['songId'] as String? ?? mediaItem.id;
   final matchedQueueItem = queue.cast<MediaItem?>().firstWhere(
-        (item) =>
-            item != null &&
-            ((item.extras?['songId'] as String? ?? item.id) == mediaSongId),
-        orElse: () => null,
-      );
+    (item) =>
+        item != null &&
+        ((item.extras?['songId'] as String? ?? item.id) == mediaSongId),
+    orElse: () => null,
+  );
   return matchedQueueItem ?? mediaItem;
 }
 
@@ -146,36 +145,41 @@ _PlaybackTimelineSnapshot _stabilizeTimelineSnapshot(
     );
   }
 
-  final isRecovering = playbackState.processingState ==
-          AudioProcessingState.buffering ||
+  final isRecovering =
+      playbackState.processingState == AudioProcessingState.buffering ||
       playbackState.processingState == AudioProcessingState.loading;
-  final jumpedBackToZero = rawPosition == Duration.zero &&
+  final jumpedBackToZero =
+      rawPosition == Duration.zero &&
       previous.position > const Duration(seconds: 2) &&
       duration > const Duration(seconds: 2) &&
       playbackState.processingState != AudioProcessingState.completed;
-  final abruptBackwardJump = rawPosition < const Duration(seconds: 3) &&
+  final abruptBackwardJump =
+      rawPosition < const Duration(seconds: 3) &&
       previous.position > const Duration(seconds: 5) &&
       rawPosition + const Duration(seconds: 2) < previous.position &&
       duration > previous.position + const Duration(seconds: 3);
-  final shouldHold = !recentUserSeek &&
+  final shouldHold =
+      !recentUserSeek &&
       playbackState.playing &&
       (isRecovering || previous.holdPositionUntilEpochMs > nowEpochMs) &&
       (jumpedBackToZero || abruptBackwardJump);
 
-  final holdUntilEpochMs =
-      shouldHold ? nowEpochMs + 1800 : 0;
-  final stabilizedPosition =
-      shouldHold ? previous.position : rawPosition;
-  final stabilizedBuffered =
-      _clampDuration(rawBuffered < stabilizedPosition ? stabilizedPosition : rawBuffered, duration);
+  final holdUntilEpochMs = shouldHold ? nowEpochMs + 1800 : 0;
+  final stabilizedPosition = shouldHold ? previous.position : rawPosition;
+  final stabilizedBuffered = _clampDuration(
+    rawBuffered < stabilizedPosition ? stabilizedPosition : rawBuffered,
+    duration,
+  );
 
   if (shouldHold) {
-    unawaited(DiagnosticLogger.instance.log(
-      '[DIAG][PLAYER] hold position during buffering: '
-      'songId=${songId ?? '<null>'}, previous=${previous.position}, '
-      'rawPosition=$rawPosition, rawBuffered=$rawBuffered, '
-      'recentUserSeek=$recentUserSeek, processingState=${playbackState.processingState}',
-    ));
+    unawaited(
+      DiagnosticLogger.instance.log(
+        '[DIAG][PLAYER] hold position during buffering: '
+        'songId=${songId ?? '<null>'}, previous=${previous.position}, '
+        'rawPosition=$rawPosition, rawBuffered=$rawBuffered, '
+        'recentUserSeek=$recentUserSeek, processingState=${playbackState.processingState}',
+      ),
+    );
   }
 
   return _PlaybackTimelineSnapshot(
@@ -187,34 +191,26 @@ _PlaybackTimelineSnapshot _stabilizeTimelineSnapshot(
   );
 }
 
-/// Combines playbackState, mediaItem, and queue into a unified PlayerState.
+/// Converts the audio-layer playback snapshot into the UI PlayerState.
 final playerProvider = StreamProvider<ps.PlayerState>((ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
 
-  return Rx.combineLatest3<PlaybackState, MediaItem?, List<MediaItem>,
-      ps.PlayerState>(
-    audioHandler.playbackState,
-    audioHandler.mediaItem,
-    audioHandler.queue,
-    (playbackState, mediaItem, queue) {
-      final resolvedMediaItem =
-          _resolveCurrentMediaItem(playbackState, mediaItem, queue);
-      final isBuffering =
-          playbackState.processingState == AudioProcessingState.buffering ||
-              playbackState.processingState == AudioProcessingState.loading;
+  return audioHandler.playbackSnapshotStream.map((snapshot) {
+    final isBuffering =
+        snapshot.processingState == AudioProcessingState.buffering ||
+        snapshot.processingState == AudioProcessingState.loading;
 
-      return ps.PlayerState(
-        currentSong: _mediaItemToSong(resolvedMediaItem),
-        queue: queue.map((item) => _mediaItemToSong(item)!).toList(),
-        currentIndex: playbackState.queueIndex ?? 0,
-        isPlaying: playbackState.playing,
-        isBuffering: isBuffering,
-        position: playbackState.updatePosition,
-        bufferedPosition: playbackState.bufferedPosition,
-        duration: resolvedMediaItem?.duration ?? Duration.zero,
-      );
-    },
-  );
+    return ps.PlayerState(
+      currentSong: _mediaItemToSong(snapshot.currentItem),
+      queue: snapshot.queue.map((item) => _mediaItemToSong(item)!).toList(),
+      currentIndex: snapshot.queueIndex ?? 0,
+      isPlaying: snapshot.playing,
+      isBuffering: isBuffering,
+      position: snapshot.position,
+      bufferedPosition: snapshot.bufferedPosition,
+      duration: snapshot.duration,
+    );
+  });
 });
 
 /// Extracts the current Song from the player state.
@@ -250,7 +246,8 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
         latestMediaItem,
         latestQueue,
       );
-      final shouldClear = resolved == null &&
+      final shouldClear =
+          resolved == null &&
           latestMediaItem == null &&
           latestQueue.isEmpty &&
           playbackState.queueIndex == null &&
@@ -261,12 +258,16 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
       }
 
       final previousSongId =
-          lastResolved?.extras?['songId'] as String? ?? lastResolved?.id ?? '<null>';
+          lastResolved?.extras?['songId'] as String? ??
+          lastResolved?.id ??
+          '<null>';
       lastResolved = null;
-      unawaited(DiagnosticLogger.instance.log(
-        '[DIAG][PLAYER] currentMediaItemProvider cleared after debounce: '
-        'previousSongId=$previousSongId',
-      ));
+      unawaited(
+        DiagnosticLogger.instance.log(
+          '[DIAG][PLAYER] currentMediaItemProvider cleared after debounce: '
+          'previousSongId=$previousSongId',
+        ),
+      );
       controller.add(null);
     });
   }
@@ -288,29 +289,36 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
       lastResolved = resolved;
     } else {
       final previousSongId =
-          lastResolved?.extras?['songId'] as String? ?? lastResolved?.id ?? '<null>';
+          lastResolved?.extras?['songId'] as String? ??
+          lastResolved?.id ??
+          '<null>';
       final queueIndex = playbackState.queueIndex;
       final processingState = playbackState.processingState;
-      final shouldDebounceClear = latestQueue.isEmpty &&
+      final shouldDebounceClear =
+          latestQueue.isEmpty &&
           latestMediaItem == null &&
           queueIndex == null &&
           processingState == AudioProcessingState.idle &&
           !playbackState.playing;
       if (shouldDebounceClear) {
-        unawaited(DiagnosticLogger.instance.log(
-          '[DIAG][PLAYER] currentMediaItemProvider debounce clear: '
-          'previousSongId=$previousSongId, queueIndex=$queueIndex, '
-          'queueLen=${latestQueue.length}, processingState=$processingState',
-        ));
+        unawaited(
+          DiagnosticLogger.instance.log(
+            '[DIAG][PLAYER] currentMediaItemProvider debounce clear: '
+            'previousSongId=$previousSongId, queueIndex=$queueIndex, '
+            'queueLen=${latestQueue.length}, processingState=$processingState',
+          ),
+        );
         scheduleClearIfStillEmpty();
         controller.add(lastResolved);
       } else {
         cancelPendingClear();
-        unawaited(DiagnosticLogger.instance.log(
-          '[DIAG][PLAYER] currentMediaItemProvider unresolved without hold: '
-          'previousSongId=$previousSongId, queueIndex=$queueIndex, '
-          'queueLen=${latestQueue.length}, processingState=$processingState',
-        ));
+        unawaited(
+          DiagnosticLogger.instance.log(
+            '[DIAG][PLAYER] currentMediaItemProvider unresolved without hold: '
+            'previousSongId=$previousSongId, queueIndex=$queueIndex, '
+            'queueLen=${latestQueue.length}, processingState=$processingState',
+          ),
+        );
         controller.add(null);
       }
       return;
@@ -343,7 +351,8 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
   });
 
   return controller.stream.distinct((previous, next) {
-    final previousSongId = previous?.extras?['songId'] as String? ?? previous?.id;
+    final previousSongId =
+        previous?.extras?['songId'] as String? ?? previous?.id;
     final nextSongId = next?.extras?['songId'] as String? ?? next?.id;
     return previousSongId == nextSongId;
   });
@@ -355,56 +364,71 @@ final currentSongIdProvider = Provider<String?>((ref) {
   return currentSong?.id;
 });
 
-/// Stream of the current playback position.
-final playbackTimelineProvider = StreamProvider<_PlaybackTimelineSnapshot>((ref) {
+Stream<_PlaybackTimelineSnapshot> _playbackTimelineStream(Ref ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
   final lastSeekIntentAt = ref.watch(playerSeekIntentProvider);
 
-  return Rx.combineLatest5<Duration, Duration, PlaybackState, MediaItem?,
-      List<MediaItem>,
-      _PlaybackTimelineEvent>(
-    audioHandler.positionStream,
-    audioHandler.bufferedPositionStream,
-    audioHandler.playbackState,
-    audioHandler.mediaItem,
-    audioHandler.queue,
-    (rawPosition, rawBufferedPosition, playbackState, mediaItem, queue) {
-      final resolvedMediaItem =
-          _resolveCurrentMediaItem(playbackState, mediaItem, queue);
-      return _PlaybackTimelineEvent(
-        playbackState: playbackState,
-        resolvedMediaItem: resolvedMediaItem,
-        rawPosition: rawPosition,
-        rawBufferedPosition: rawBufferedPosition,
-      );
-    },
-  ).scan<_PlaybackTimelineSnapshot>(
-    (previous, event, _) =>
-        _stabilizeTimelineSnapshot(previous, event, lastSeekIntentAt),
-    const _PlaybackTimelineSnapshot(
-      songId: null,
-      position: Duration.zero,
-      bufferedPosition: Duration.zero,
-      duration: Duration.zero,
-    ),
-  ).skip(1).distinct((previous, next) {
-    return previous.songId == next.songId &&
-        previous.position == next.position &&
-        previous.bufferedPosition == next.bufferedPosition &&
-        previous.duration == next.duration;
-  });
-});
+  return Rx.combineLatest5<
+        Duration,
+        Duration,
+        PlaybackState,
+        MediaItem?,
+        List<MediaItem>,
+        _PlaybackTimelineEvent
+      >(
+        audioHandler.positionStream,
+        audioHandler.bufferedPositionStream,
+        audioHandler.playbackState,
+        audioHandler.mediaItem,
+        audioHandler.queue,
+        (rawPosition, rawBufferedPosition, playbackState, mediaItem, queue) {
+          final resolvedMediaItem = _resolveCurrentMediaItem(
+            playbackState,
+            mediaItem,
+            queue,
+          );
+          return _PlaybackTimelineEvent(
+            playbackState: playbackState,
+            resolvedMediaItem: resolvedMediaItem,
+            rawPosition: rawPosition,
+            rawBufferedPosition: rawBufferedPosition,
+          );
+        },
+      )
+      .scan<_PlaybackTimelineSnapshot>(
+        (previous, event, _) =>
+            _stabilizeTimelineSnapshot(previous, event, lastSeekIntentAt),
+        const _PlaybackTimelineSnapshot(
+          songId: null,
+          position: Duration.zero,
+          bufferedPosition: Duration.zero,
+          duration: Duration.zero,
+        ),
+      )
+      .skip(1)
+      .distinct((previous, next) {
+        return previous.songId == next.songId &&
+            previous.position == next.position &&
+            previous.bufferedPosition == next.bufferedPosition &&
+            previous.duration == next.duration;
+      });
+}
+
+/// Stream of the current playback timeline.
+final playbackTimelineProvider = StreamProvider<_PlaybackTimelineSnapshot>(
+  _playbackTimelineStream,
+);
 
 /// Stream of the current playback position.
 final positionProvider = StreamProvider<Duration>((ref) {
-  return ref.watch(playbackTimelineProvider.stream).map((snapshot) => snapshot.position);
+  return _playbackTimelineStream(ref).map((snapshot) => snapshot.position);
 });
 
 /// Stream of the buffered position.
 final bufferedPositionProvider = StreamProvider<Duration>((ref) {
-  return ref
-      .watch(playbackTimelineProvider.stream)
-      .map((snapshot) => snapshot.bufferedPosition);
+  return _playbackTimelineStream(
+    ref,
+  ).map((snapshot) => snapshot.bufferedPosition);
 });
 
 /// Stream of the total duration of the current track.

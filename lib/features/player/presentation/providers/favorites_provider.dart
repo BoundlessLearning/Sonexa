@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:sonexa/features/home/presentation/providers/home_provider.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
-import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 final favoritesNotifierProvider =
     StateNotifierProvider<FavoritesNotifier, Set<String>>((ref) {
