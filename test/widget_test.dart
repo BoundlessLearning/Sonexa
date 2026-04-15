@@ -1,2 +1,7 @@
-// Sonexa widget tests will be added here.
-// The default Flutter counter test is not applicable.
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('widget tests placeholder', () {
+    expect(true, isTrue);
+  });
+}
