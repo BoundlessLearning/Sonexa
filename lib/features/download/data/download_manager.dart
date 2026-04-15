@@ -10,15 +10,21 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/error/app_error.dart';
 import 'package:sonexa/core/network/subsonic_api_client.dart';
 import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
 import 'package:sonexa/features/download/data/download_dao.dart';
 import 'package:sonexa/features/download/domain/entities/download_task.dart';
+import 'package:sonexa/features/library/data/mappers/subsonic_mappers.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 
 class DownloadManager {
-  DownloadManager(this._apiClient, this._db, this._baseDownloadDirectory)
-    : _dao = DownloadDao(_db) {
+  DownloadManager(
+    this._apiClient,
+    this._db,
+    this._baseDownloadDirectory, {
+    required this.sessionId,
+  }) : _dao = DownloadDao(_db) {
     _downloadsSubscription = _dao.watchAllDownloads().listen((downloads) {
       _latestDownloads = downloads;
       _scheduleEmit();
@@ -28,10 +34,15 @@ class DownloadManager {
 
   static const int _maxConcurrentDownloads = 3;
   static const Uuid _uuid = Uuid();
+  static final String _downloadCancelledError =
+      AppErrorCode.downloadCancelled.storageValue;
+  static final String _downloadFileMissingOrInvalidError =
+      AppErrorCode.downloadFileMissingOrInvalid.storageValue;
 
   final SubsonicApiClient _apiClient;
   final AppDatabase _db;
   final String _baseDownloadDirectory;
+  final String sessionId;
   final DownloadDao _dao;
 
   final Queue<_QueuedDownload> _pendingQueue = ListQueue<_QueuedDownload>();
@@ -67,7 +78,7 @@ class DownloadManager {
         await _markDownloadFailed(
           existingDownload.id,
           song.id,
-          'Downloaded file is missing or invalid.',
+          _downloadFileMissingOrInvalidError,
         );
       }
 
@@ -115,8 +126,14 @@ class DownloadManager {
     if (queuedTask != null) {
       _pendingQueue.remove(queuedTask);
       _progressByTaskId.remove(taskId);
-      _errorByTaskId[taskId] = '下载已取消';
-      unawaited(_markDownloadFailed(taskId, queuedTask.song.id, '下载已取消'));
+      _errorByTaskId[taskId] = _downloadCancelledError;
+      unawaited(
+        _markDownloadFailed(
+          taskId,
+          queuedTask.song.id,
+          _downloadCancelledError,
+        ),
+      );
       _scheduleEmit();
       return;
     }
@@ -124,11 +141,10 @@ class DownloadManager {
     final token = _activeTokens[taskId];
     if (token == null) return;
 
-    _progressByTaskId[taskId] = _progressByTaskId[taskId]?.copyWith(
-          status: DownloadStatus.failed,
-        ) ??
+    _progressByTaskId[taskId] =
+        _progressByTaskId[taskId]?.copyWith(status: DownloadStatus.failed) ??
         const _ProgressSnapshot(status: DownloadStatus.failed);
-    _errorByTaskId[taskId] = '下载已取消';
+    _errorByTaskId[taskId] = _downloadCancelledError;
     token.cancel('Download cancelled');
     unawaited(_dao.updateDownloadStatus(taskId, DownloadStatus.failed.name));
     _scheduleEmit();
@@ -173,7 +189,9 @@ class DownloadManager {
       _deleteRequestedTaskIds.remove(taskId);
     }
 
-    final row = _latestDownloads.firstWhereOrNull((download) => download.id == taskId);
+    final row = _latestDownloads.firstWhereOrNull(
+      (download) => download.id == taskId,
+    );
     if (row == null) {
       await _dao.deleteDownload(taskId);
       _progressByTaskId.remove(taskId);
@@ -196,7 +214,9 @@ class DownloadManager {
       return;
     }
 
-    final row = _latestDownloads.firstWhereOrNull((download) => download.id == taskId);
+    final row = _latestDownloads.firstWhereOrNull(
+      (download) => download.id == taskId,
+    );
     if (row == null || row.status != DownloadStatus.failed.name) {
       return;
     }
@@ -216,12 +236,23 @@ class DownloadManager {
     if (_isDisposed) return;
     _isDisposed = true;
 
+    final runningTasks = _runningTasks.values.toList(growable: false);
     cancelAllDownloads();
+    for (final task in runningTasks) {
+      try {
+        await task;
+      } catch (_) {
+        // Cancellation errors are expected while tearing down a session.
+      }
+    }
     await _downloadsSubscription?.cancel();
     await _downloadsController.close();
   }
 
-  Future<void> _queueDownload({required Song song, required String taskId}) async {
+  Future<void> _queueDownload({
+    required Song song,
+    required String taskId,
+  }) async {
     final now = DateTime.now();
     _progressByTaskId[taskId] = const _ProgressSnapshot(
       status: DownloadStatus.pending,
@@ -245,7 +276,8 @@ class DownloadManager {
   }
 
   void _tryStartNextDownloads() {
-    while (_activeTokens.length < _maxConcurrentDownloads && _pendingQueue.isNotEmpty) {
+    while (_activeTokens.length < _maxConcurrentDownloads &&
+        _pendingQueue.isNotEmpty) {
       final nextTask = _pendingQueue.removeFirst();
       final future = _startDownload(nextTask);
       _runningTasks[nextTask.taskId] = future;
@@ -316,9 +348,9 @@ class DownloadManager {
           ),
         );
 
-        await (_db.update(_db.cachedSongs)..where((tbl) => tbl.id.equals(song.id))).write(
-          CachedSongsCompanion(localFilePath: Value(filePath)),
-        );
+        await (_db.update(_db.cachedSongs)..where(
+          (tbl) => tbl.id.equals(song.id),
+        )).write(CachedSongsCompanion(localFilePath: Value(filePath)));
       });
 
       _progressByTaskId[taskId] = _ProgressSnapshot(
@@ -335,7 +367,10 @@ class DownloadManager {
         return;
       }
 
-      final errorMessage = cancelToken.isCancelled ? '下载已取消' : error.toString();
+      final errorMessage =
+          cancelToken.isCancelled
+              ? _downloadCancelledError
+              : _downloadErrorMessage(error);
       _errorByTaskId[taskId] = errorMessage;
       await _markDownloadFailed(taskId, song.id, errorMessage);
     } finally {
@@ -361,12 +396,13 @@ class DownloadManager {
         ),
       );
 
-      await (_db.update(_db.cachedSongs)..where((tbl) => tbl.id.equals(songId))).write(
-        const CachedSongsCompanion(localFilePath: Value(null)),
-      );
+      await (_db.update(_db.cachedSongs)..where(
+        (tbl) => tbl.id.equals(songId),
+      )).write(const CachedSongsCompanion(localFilePath: Value(null)));
     });
 
-    _progressByTaskId[taskId] = _progressByTaskId[taskId]?.copyWith(
+    _progressByTaskId[taskId] =
+        _progressByTaskId[taskId]?.copyWith(
           status: DownloadStatus.failed,
           progress: 0,
         ) ??
@@ -394,7 +430,7 @@ class DownloadManager {
       await _markDownloadFailed(
         download.id,
         download.songId,
-        'Downloaded file is missing or invalid.',
+        _downloadFileMissingOrInvalidError,
       );
     }
   }
@@ -405,8 +441,9 @@ class DownloadManager {
       return cachedSong;
     }
 
-    final row = await (_db.select(_db.cachedSongs)..where((tbl) => tbl.id.equals(songId)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.cachedSongs)
+          ..where((tbl) => tbl.id.equals(songId))).getSingleOrNull();
     if (row != null) {
       final song = Song(
         id: row.id,
@@ -448,69 +485,43 @@ class DownloadManager {
         return null;
       }
 
-      final song = _parseSongJson(songJson.cast<String, dynamic>());
-      await _db.into(_db.cachedSongs).insertOnConflictUpdate(
-        CachedSongsCompanion.insert(
-          id: song.id,
-          title: song.title,
-          artist: song.artist,
-          artistId: song.artistId,
-          album: song.album,
-          albumId: song.albumId,
-          coverArtId: Value(song.coverArtId),
-          duration: song.duration,
-          track: Value(song.track),
-          discNumber: Value(song.discNumber),
-          year: Value(song.year),
-          genre: Value(song.genre),
-          bitRate: Value(song.bitRate),
-          suffix: Value(song.suffix),
-          size: Value(song.size),
-          playCount: Value(song.playCount),
-          starred: Value(song.starred),
-          lastPlayed: Value(song.lastPlayed),
-          localFilePath: Value(song.localFilePath),
-          cachedAt: DateTime.now(),
-        ),
-      );
+      final song = SubsonicMappers.song(songJson.cast<String, dynamic>());
+      await _db
+          .into(_db.cachedSongs)
+          .insertOnConflictUpdate(
+            CachedSongsCompanion.insert(
+              id: song.id,
+              title: song.title,
+              artist: song.artist,
+              artistId: song.artistId,
+              album: song.album,
+              albumId: song.albumId,
+              coverArtId: Value(song.coverArtId),
+              duration: song.duration,
+              track: Value(song.track),
+              discNumber: Value(song.discNumber),
+              year: Value(song.year),
+              genre: Value(song.genre),
+              bitRate: Value(song.bitRate),
+              suffix: Value(song.suffix),
+              size: Value(song.size),
+              playCount: Value(song.playCount),
+              starred: Value(song.starred),
+              lastPlayed: Value(song.lastPlayed),
+              localFilePath: Value(song.localFilePath),
+              cachedAt: DateTime.now(),
+            ),
+          );
       return song;
     } catch (_) {
       return null;
     }
   }
 
-  Song _parseSongJson(Map<String, dynamic> json) {
-    return Song(
-      id: json['id'] as String,
-      title: json['title'] as String? ?? '',
-      artist: json['artist'] as String? ?? 'Unknown',
-      artistId: json['artistId'] as String? ?? '',
-      album: json['album'] as String? ?? '',
-      albumId: json['albumId'] as String? ?? '',
-      coverArtId: json['coverArt'] as String?,
-      duration: json['duration'] as int? ?? 0,
-      track: json['track'] as int?,
-      discNumber: json['discNumber'] as int?,
-      year: json['year'] as int?,
-      genre: json['genre'] as String?,
-      bitRate: json['bitRate'] as int?,
-      suffix: json['suffix'] as String?,
-      size: json['size'] as int?,
-      playCount: json['playCount'] as int? ?? 0,
-      starred: json['starred'] != null
-          ? DateTime.tryParse(json['starred'] as String)
-          : null,
-      lastPlayed: json['played'] != null
-          ? DateTime.tryParse(json['played'] as String)
-          : null,
-      localFilePath: null,
-    );
-  }
-
   Future<void> _clearSongLocalPath(String songId) async {
-    await (_db.update(_db.cachedSongs)..where((tbl) => tbl.id.equals(songId))).write(
-      const CachedSongsCompanion(localFilePath: Value(null)),
-    );
+    await (_db.update(_db.cachedSongs)..where(
+      (tbl) => tbl.id.equals(songId),
+    )).write(const CachedSongsCompanion(localFilePath: Value(null)));
   }
 
   Future<String> _resolveDownloadDirectory() async {
@@ -560,20 +571,27 @@ class DownloadManager {
   }) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw const FileSystemException('Downloaded file does not exist.');
+      throw _DownloadValidationException(AppErrorCode.downloadFileMissing);
     }
 
     final fileSize = await file.length();
     if (fileSize <= 0) {
-      throw const FileSystemException('Downloaded file is empty.');
+      throw _DownloadValidationException(AppErrorCode.downloadFileEmpty);
     }
 
     final expectedSize = song?.size ?? fallbackExpectedSize;
     if (expectedSize != null && expectedSize > 0 && fileSize != expectedSize) {
-      throw FileSystemException('Downloaded file size mismatch.', filePath);
+      throw _DownloadValidationException(AppErrorCode.downloadFileSizeMismatch);
     }
 
     return fileSize;
+  }
+
+  String _downloadErrorMessage(Object error) {
+    if (error is _DownloadValidationException) {
+      return error.code.storageValue;
+    }
+    return error.toString();
   }
 
   void _scheduleEmit() {
@@ -605,13 +623,20 @@ class DownloadManager {
       title: song?.title ?? 'Unknown',
       artist: song?.artist ?? 'Unknown',
       status: status,
-      progress: progress?.progress ?? (status == DownloadStatus.completed ? 1 : 0),
+      progress:
+          progress?.progress ?? (status == DownloadStatus.completed ? 1 : 0),
       localPath: download.localPath.isEmpty ? null : download.localPath,
-      totalBytes: progress?.totalBytes ?? (download.fileSize > 0 ? download.fileSize : null),
-      downloadedBytes: progress?.downloadedBytes ??
-          (status == DownloadStatus.completed && download.fileSize > 0 ? download.fileSize : null),
+      totalBytes:
+          progress?.totalBytes ??
+          (download.fileSize > 0 ? download.fileSize : null),
+      downloadedBytes:
+          progress?.downloadedBytes ??
+          (status == DownloadStatus.completed && download.fileSize > 0
+              ? download.fileSize
+              : null),
       startedAt: download.downloadedAt,
-      completedAt: status == DownloadStatus.completed ? download.downloadedAt : null,
+      completedAt:
+          status == DownloadStatus.completed ? download.downloadedAt : null,
       error: _errorByTaskId[download.id],
     );
   }
@@ -624,10 +649,11 @@ class DownloadManager {
   }
 
   String _sanitizeFileName(String value) {
-    final sanitized = value
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    final sanitized =
+        value
+            .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
     return sanitized.isEmpty ? 'song' : sanitized;
   }
 
@@ -643,9 +669,8 @@ class DownloadManager {
     final extension = _resolveFileSuffix(song.suffix);
     final title = _sanitizeFileName(song.title);
     final artist = _sanitizeFileName(song.artist);
-    final baseName = artist.isEmpty || artist == 'Unknown'
-        ? title
-        : '$title - $artist';
+    final baseName =
+        artist.isEmpty || artist == 'Unknown' ? title : '$title - $artist';
 
     var candidateName = '$baseName.$extension';
     var candidatePath = p.join(directoryPath, candidateName);
@@ -694,4 +719,10 @@ class _ProgressSnapshot {
       totalBytes: totalBytes ?? this.totalBytes,
     );
   }
+}
+
+class _DownloadValidationException implements Exception {
+  const _DownloadValidationException(this.code);
+
+  final AppErrorCode code;
 }

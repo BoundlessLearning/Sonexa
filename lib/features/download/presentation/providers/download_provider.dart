@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
@@ -13,15 +14,22 @@ import 'package:sonexa/features/download/domain/entities/download_task.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 class DownloadDirectoryInfo {
-  const DownloadDirectoryInfo({
-    required this.path,
-    required this.isPublic,
-    required this.label,
-  });
+  const DownloadDirectoryInfo({required this.path, required this.isPublic});
 
   final String path;
   final bool isPublic;
-  final String label;
+}
+
+class DownloadServiceSession {
+  const DownloadServiceSession({
+    required this.id,
+    required this.serverId,
+    required this.downloadDirectoryPath,
+  });
+
+  final String id;
+  final String serverId;
+  final String downloadDirectoryPath;
 }
 
 final downloadDirectoryInfoProvider = FutureProvider<DownloadDirectoryInfo>((
@@ -29,29 +37,46 @@ final downloadDirectoryInfoProvider = FutureProvider<DownloadDirectoryInfo>((
 ) async {
   final publicDirectory = await _resolvePublicDownloadDirectory();
   if (publicDirectory != null) {
-    return DownloadDirectoryInfo(
-      path: publicDirectory,
-      isPublic: true,
-      label: '公开下载目录',
-    );
+    return DownloadDirectoryInfo(path: publicDirectory, isPublic: true);
   }
 
   final documentsDirectory = await getApplicationDocumentsDirectory();
   return DownloadDirectoryInfo(
     path: p.join(documentsDirectory.path, 'downloads'),
     isPublic: false,
-    label: '应用私有目录',
+  );
+});
+
+final downloadServiceSessionProvider = FutureProvider<DownloadServiceSession>((
+  ref,
+) async {
+  final server = await ref.watch(activeServerProvider.future);
+  if (server == null) {
+    throw StateError('No active server configured');
+  }
+
+  final directoryInfo = await ref.watch(downloadDirectoryInfoProvider.future);
+  final sessionId = '${server.id}|${directoryInfo.path}';
+  return DownloadServiceSession(
+    id: sessionId,
+    serverId: server.id,
+    downloadDirectoryPath: directoryInfo.path,
   );
 });
 
 final downloadManagerProvider = FutureProvider<DownloadManager>((ref) async {
+  final session = await ref.watch(downloadServiceSessionProvider.future);
   final apiClient = await ref.watch(subsonicApiClientProvider.future);
   final database = ref.read(databaseProvider);
-  final directoryInfo = await ref.watch(downloadDirectoryInfoProvider.future);
 
-  final manager = DownloadManager(apiClient, database, directoryInfo.path);
+  final manager = DownloadManager(
+    apiClient,
+    database,
+    session.downloadDirectoryPath,
+    sessionId: session.id,
+  );
   ref.onDispose(() {
-    manager.dispose();
+    unawaited(manager.dispose());
   });
   return manager;
 });
@@ -95,7 +120,10 @@ final downloadedSongPathProvider = FutureProvider.family<String?, String>((
   return fileSize > 0 ? download.localPath : null;
 });
 
-final downloadProgressProvider = Provider.family<double?, String>((ref, taskId) {
+final downloadProgressProvider = Provider.family<double?, String>((
+  ref,
+  taskId,
+) {
   final tasks =
       ref.watch(downloadListProvider).valueOrNull ?? const <DownloadTask>[];
   final task = tasks.where((item) => item.id == taskId).firstOrNull;
@@ -140,9 +168,7 @@ Future<bool> _ensureDirectoryWritable(String path) async {
     final directory = Directory(path);
     await directory.create(recursive: true);
 
-    final probeFile = File(
-      p.join(directory.path, '.sonexa_write_test'),
-    );
+    final probeFile = File(p.join(directory.path, '.sonexa_write_test'));
     await probeFile.writeAsString('ok', flush: true);
     if (await probeFile.exists()) {
       await probeFile.delete();
