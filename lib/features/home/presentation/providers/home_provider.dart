@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sonexa/features/library/data/mappers/subsonic_mappers.dart';
 import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
 import 'package:sonexa/features/library/domain/entities/album.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
@@ -35,7 +36,9 @@ final starredSongsProvider = FutureProvider<List<Song>>((ref) async {
   final starred = body?['starred2'] as Map<String, dynamic>?;
   final songs = starred?['song'] as List<dynamic>? ?? [];
 
-  return songs.map((song) => _parseSong(song as Map<String, dynamic>)).toList();
+  return songs
+      .map((song) => SubsonicMappers.song(song as Map<String, dynamic>))
+      .toList();
 });
 
 // ─── 猜你喜欢 ───────────────────────────────────────────────
@@ -51,27 +54,7 @@ final similarSongsProvider = FutureProvider<List<Song>>((ref) async {
   final similarSongs = body?['similarSongs2'] as Map<String, dynamic>?;
   final songs = similarSongs?['song'] as List<dynamic>? ?? [];
 
-  return songs.map((song) => _parseSong(song as Map<String, dynamic>)).toList();
+  return songs
+      .map((song) => SubsonicMappers.song(song as Map<String, dynamic>))
+      .toList();
 });
-
-Song _parseSong(Map<String, dynamic> json) => Song(
-      id: json['id'] as String,
-      title: json['title'] as String? ?? '',
-      artist: json['artist'] as String? ?? 'Unknown',
-      artistId: json['artistId'] as String? ?? '',
-      album: json['album'] as String? ?? '',
-      albumId: json['albumId'] as String? ?? '',
-      coverArtId: json['coverArt'] as String?,
-      duration: json['duration'] as int? ?? 0,
-      track: json['track'] as int?,
-      discNumber: json['discNumber'] as int?,
-      year: json['year'] as int?,
-      genre: json['genre'] as String?,
-      bitRate: json['bitRate'] as int?,
-      suffix: json['suffix'] as String?,
-      size: json['size'] as int?,
-      playCount: json['playCount'] as int? ?? 0,
-      starred: json['starred'] != null
-          ? DateTime.tryParse(json['starred'] as String)
-          : null,
-    );
