@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -58,7 +59,62 @@ final routerProvider = Provider<GoRouter>((ref) {
           // 首页
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/', builder: (context, state) => const HomePage()),
+              GoRoute(
+                path: '/',
+                builder: (context, state) => const HomePage(),
+                routes: [
+                  GoRoute(
+                    path: 'history',
+                    pageBuilder:
+                        (context, state) => fadeTransition(
+                          key: state.pageKey,
+                          child: const PlayHistoryPage(),
+                        ),
+                  ),
+                  GoRoute(
+                    path: 'random-songs',
+                    pageBuilder: (context, state) {
+                      final l10n = AppLocalizations.of(context);
+                      return fadeTransition(
+                        key: state.pageKey,
+                        child: SongListPage(
+                          title: l10n.randomSongs,
+                          provider: homeRandomSongsProvider,
+                          emptyMessage: l10n.noRandomSongs,
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'starred-songs',
+                    pageBuilder: (context, state) {
+                      final l10n = AppLocalizations.of(context);
+                      return fadeTransition(
+                        key: state.pageKey,
+                        child: SongListPage(
+                          title: l10n.starredSongs,
+                          provider: starredSongsProvider,
+                          emptyMessage: l10n.noStarredSongs,
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'similar-songs',
+                    pageBuilder: (context, state) {
+                      final l10n = AppLocalizations.of(context);
+                      return fadeTransition(
+                        key: state.pageKey,
+                        child: SongListPage(
+                          title: l10n.similarSongs,
+                          provider: similarSongsProvider,
+                          emptyMessage: l10n.noSimilarSongs,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
           // 音乐库
@@ -129,14 +185,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                 slideUpTransition(key: state.pageKey, child: const QueuePage()),
       ),
       GoRoute(
-        path: '/history',
-        pageBuilder:
-            (context, state) => fadeTransition(
-              key: state.pageKey,
-              child: const PlayHistoryPage(),
-            ),
-      ),
-      GoRoute(
         path: '/downloads',
         pageBuilder:
             (context, state) => fadeTransition(
@@ -174,48 +222,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/random-songs',
-        pageBuilder: (context, state) {
-          final l10n = AppLocalizations.of(context);
-          return fadeTransition(
-            key: state.pageKey,
-            child: SongListPage(
-              title: l10n.randomSongs,
-              provider: homeRandomSongsProvider,
-              emptyMessage: l10n.noRandomSongs,
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/starred-songs',
-        pageBuilder: (context, state) {
-          final l10n = AppLocalizations.of(context);
-          return fadeTransition(
-            key: state.pageKey,
-            child: SongListPage(
-              title: l10n.starredSongs,
-              provider: starredSongsProvider,
-              emptyMessage: l10n.noStarredSongs,
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/similar-songs',
-        pageBuilder: (context, state) {
-          final l10n = AppLocalizations.of(context);
-          return fadeTransition(
-            key: state.pageKey,
-            child: SongListPage(
-              title: l10n.similarSongs,
-              provider: similarSongsProvider,
-              emptyMessage: l10n.noSimilarSongs,
-            ),
-          );
-        },
-      ),
-      GoRoute(
         path: '/lyrics-search',
         pageBuilder: (context, state) {
           final queryParams = state.uri.queryParameters;
@@ -233,46 +239,87 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  DateTime? _lastBackPressedAt;
+
+  void _handleBackPressed() {
+    final l10n = AppLocalizations.of(context);
+    final router = GoRouter.of(context);
+
+    if (router.canPop()) {
+      router.pop();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_lastBackPressedAt == null ||
+        now.difference(_lastBackPressedAt!) > const Duration(seconds: 2)) {
+      _lastBackPressedAt = now;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n.pressBackAgainToExit)));
+      return;
+    }
+
+    SystemNavigator.pop();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
-    return Scaffold(
-      body: Column(
-        children: [Expanded(child: navigationShell), const MiniPlayer()],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: navigationShell.currentIndex,
-        onTap: (index) {
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.home),
-            label: l10n.homeTab,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.library_music),
-            label: l10n.libraryTab,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.search),
-            label: l10n.searchTab,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.settings),
-            label: l10n.settingsTab,
-          ),
-        ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        _handleBackPressed();
+      },
+      child: Scaffold(
+        body: Column(
+          children: [
+            Expanded(child: widget.navigationShell),
+            const MiniPlayer(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          currentIndex: widget.navigationShell.currentIndex,
+          onTap: (index) {
+            widget.navigationShell.goBranch(
+              index,
+              initialLocation: index == widget.navigationShell.currentIndex,
+            );
+          },
+          items: [
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.home),
+              label: l10n.homeTab,
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.library_music),
+              label: l10n.libraryTab,
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.search),
+              label: l10n.searchTab,
+            ),
+            BottomNavigationBarItem(
+              icon: const Icon(Icons.settings),
+              label: l10n.settingsTab,
+            ),
+          ],
+        ),
       ),
     );
   }

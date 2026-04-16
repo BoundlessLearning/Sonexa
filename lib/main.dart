@@ -11,9 +11,11 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:sonexa/app.dart';
 import 'package:sonexa/core/audio/audio_handler.dart';
+import 'package:sonexa/core/audio/playback_session_store.dart';
 import 'package:sonexa/core/audio/windows_media_controls.dart';
 import 'package:sonexa/core/constants/app_branding.dart';
 import 'package:sonexa/core/database/app_database.dart';
+import 'package:sonexa/core/database/daos/settings_dao.dart';
 import 'package:sonexa/core/theme/app_theme.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/image_cache_config.dart';
@@ -145,7 +147,10 @@ class _BootstrapAppState extends State<_BootstrapApp> {
     final themeMode = await ThemeModeNotifier.loadStoredThemeMode(_database);
 
     final audioHandler = await AudioService.init(
-      builder: () => MusicAudioHandler(),
+      builder:
+          () => MusicAudioHandler(
+            playbackSessionStore: PlaybackSessionStore(SettingsDao(_database)),
+          ),
       config: const AudioServiceConfig(
         androidNotificationChannelId: AppBranding.audioNotificationChannelId,
         androidNotificationChannelName:

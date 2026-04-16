@@ -9,6 +9,7 @@ import 'package:sonexa/core/audio/audio_source_factory.dart';
 import 'package:sonexa/core/audio/playback_mode_controller.dart';
 import 'package:sonexa/core/audio/playback_recovery_policy.dart';
 import 'package:sonexa/core/audio/playback_snapshot.dart';
+import 'package:sonexa/core/audio/playback_session_store.dart';
 
 export 'package:audio_service/audio_service.dart' show AudioServiceRepeatMode;
 export 'package:sonexa/core/audio/playback_mode_controller.dart'
@@ -18,8 +19,9 @@ class MusicAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   static const Duration _playerOperationTimeout = Duration(seconds: 12);
   static const Duration _seekGuardWindow = Duration(seconds: 3);
-  MusicAudioHandler()
-    : _player = AudioPlayer(),
+  MusicAudioHandler({required PlaybackSessionStore playbackSessionStore})
+    : _playbackSessionStore = playbackSessionStore,
+      _player = AudioPlayer(),
       _playlist = ConcatenatingAudioSource(children: []) {
     _init();
   }
@@ -27,10 +29,13 @@ class MusicAudioHandler extends BaseAudioHandler
   // ignore: prefer_final_fields — 播放器可能需要在严重错误后重建
   AudioPlayer _player;
   ConcatenatingAudioSource _playlist;
+  final PlaybackSessionStore _playbackSessionStore;
   final AudioDiagnostics _audioDiagnostics = const AudioDiagnostics();
   final AudioSourceFactory _audioSourceFactory = const AudioSourceFactory();
 
   bool _skipInProgress = false;
+  Timer? _persistSessionTimer;
+  bool _isRestoringSession = false;
 
   // ── [Round8-F3] 自维护 currentIndex ──
   // _player.currentIndex 依赖 just_audio 的异步 stream pipeline
@@ -261,6 +266,7 @@ class MusicAudioHandler extends BaseAudioHandler
     _listenToCurrentIndex();
     _listenToProcessingState();
     _startHealthCheck();
+    await _restorePersistedSession();
   }
 
   /// 用 .listen() 替代 .pipe()，防止错误关闭 playbackState sink
@@ -354,6 +360,7 @@ class MusicAudioHandler extends BaseAudioHandler
           '_player.currentIndex=${_player.currentIndex}',
         );
         playbackState.add(_transformEvent(_player.playbackEvent));
+        _schedulePersistPlaybackSession();
       } else {
         _diag(
           '[DIAG] sequenceState: tag is NOT MediaItem, '
@@ -490,7 +497,109 @@ class MusicAudioHandler extends BaseAudioHandler
         );
         _attemptRecovery();
       }
+
+      if (queue.value.isNotEmpty) {
+        _schedulePersistPlaybackSession();
+      }
     });
+  }
+
+  void _schedulePersistPlaybackSession({
+    Duration delay = const Duration(milliseconds: 250),
+  }) {
+    if (_isRestoringSession) {
+      return;
+    }
+
+    _persistSessionTimer?.cancel();
+    _persistSessionTimer = Timer(delay, () {
+      unawaited(_persistPlaybackSession());
+    });
+  }
+
+  Future<void> _persistPlaybackSession() async {
+    if (_isRestoringSession) {
+      return;
+    }
+
+    final items = queue.value;
+    if (items.isEmpty) {
+      await _playbackSessionStore.clear();
+      return;
+    }
+
+    final safeIndex = _currentIndex.clamp(0, items.length - 1);
+    final currentItem = items[safeIndex];
+    final duration = currentItem.duration ?? Duration.zero;
+    final rawPosition = _player.position;
+    final clampedPosition =
+        duration > Duration.zero && rawPosition > duration
+            ? duration
+            : rawPosition;
+
+    await _playbackSessionStore.save(
+      PlaybackSessionSnapshot(
+        queue: items,
+        currentIndex: safeIndex,
+        position: clampedPosition,
+        wasPlaying: _player.playing,
+        playMode: _playbackModeController.mode,
+      ),
+    );
+  }
+
+  Future<void> _restorePersistedSession() async {
+    final snapshot = await _playbackSessionStore.load();
+    if (snapshot == null) {
+      _diag('[DIAG] restore session: no persisted playback snapshot');
+      return;
+    }
+
+    _diag(
+      '[DIAG] restore session: queue=${snapshot.queue.length}, '
+      'index=${snapshot.currentIndex}, '
+      'position=${snapshot.position}, '
+      'playMode=${snapshot.playMode}, '
+      'wasPlaying=${snapshot.wasPlaying}',
+    );
+
+    _isRestoringSession = true;
+    try {
+      final items = List<MediaItem>.from(snapshot.queue);
+      final safeIndex = snapshot.currentIndex.clamp(0, items.length - 1);
+      final sources = items.map(_audioSourceFromItem).toList();
+
+      _playbackModeController.setMode(snapshot.playMode);
+      queue.add(items);
+      _playlist = ConcatenatingAudioSource(children: sources);
+      await _withTimeout(
+        _player.setAudioSource(_playlist, initialIndex: safeIndex),
+        'restoreSession.setAudioSource',
+      );
+      _currentIndex = safeIndex;
+      mediaItem.add(items[safeIndex]);
+      playbackState.add(_transformEvent(_player.playbackEvent));
+
+      if (snapshot.position > Duration.zero) {
+        await _withTimeout(
+          _player.seek(snapshot.position),
+          'restoreSession.seek',
+        );
+      }
+
+      _pauseRequested = true;
+      await _player.pause();
+      _diag('[DIAG] restore session: completed');
+    } catch (error, stackTrace) {
+      _diag(
+        '[DIAG] restore session FAILED: $error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _isRestoringSession = false;
+      _schedulePersistPlaybackSession(delay: Duration.zero);
+    }
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {
@@ -777,6 +886,7 @@ class MusicAudioHandler extends BaseAudioHandler
       }
 
       await play();
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     } on TimeoutException catch (e, st) {
       _diag(
         '[DIAG] loadAndPlay TIMEOUT at index $initialIndex: $e',
@@ -864,6 +974,7 @@ class MusicAudioHandler extends BaseAudioHandler
     try {
       await _startPlayback('play');
       _diag('[DIAG] play() succeeded');
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     } catch (e, st) {
       _diag('[DIAG] play() FAILED: $e', error: e, stackTrace: st);
       if (currentItem != null) {
@@ -888,6 +999,7 @@ class MusicAudioHandler extends BaseAudioHandler
     );
     try {
       await _player.pause();
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     } catch (e, st) {
       _diag('[DIAG] pause() FAILED: $e', error: e, stackTrace: st);
     }
@@ -919,6 +1031,7 @@ class MusicAudioHandler extends BaseAudioHandler
           _clearSeekGuard('seek-window-expired');
         }
       });
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     } on TimeoutException catch (e, st) {
       _currentIndex = savedIndex;
       if (savedItem != null) {
@@ -981,6 +1094,7 @@ class MusicAudioHandler extends BaseAudioHandler
       }
     } finally {
       _skipInProgress = false;
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     }
   }
 
@@ -1024,6 +1138,7 @@ class MusicAudioHandler extends BaseAudioHandler
       }
     } finally {
       _skipInProgress = false;
+      _schedulePersistPlaybackSession(delay: Duration.zero);
     }
   }
 
@@ -1306,6 +1421,8 @@ class MusicAudioHandler extends BaseAudioHandler
   @override
   Future<void> stop() async {
     _diag('[DIAG] stop() called');
+    _persistSessionTimer?.cancel();
+    await _persistPlaybackSession();
     _healthCheckTimer?.cancel();
     await _player.stop();
     await _player.dispose();
@@ -1333,6 +1450,7 @@ class MusicAudioHandler extends BaseAudioHandler
       'position=${_player.position}',
     );
 
+    _schedulePersistPlaybackSession(delay: Duration.zero);
     return _normalizePlayerTransitionModes();
   }
 
@@ -1345,6 +1463,7 @@ class MusicAudioHandler extends BaseAudioHandler
       '[DIAG] setPlayMode($mode): _currentIndex=$_currentIndex, '
       'position=${_player.position}',
     );
+    _schedulePersistPlaybackSession(delay: Duration.zero);
     await _normalizePlayerTransitionModes();
   }
 
@@ -1377,6 +1496,7 @@ class MusicAudioHandler extends BaseAudioHandler
       '[DIAG] setShuffle($enabled): logical mode only, '
       'physical queue preserved, playMode=${_playbackModeController.mode}',
     );
+    _schedulePersistPlaybackSession(delay: Duration.zero);
   }
 
   /// 重建 ConcatenatingAudioSource 并设置到播放器。
@@ -1430,6 +1550,7 @@ class MusicAudioHandler extends BaseAudioHandler
     if (_playbackModeController.shuffleEnabled) {
       _originalQueue = [..._originalQueue, item];
     }
+    _schedulePersistPlaybackSession(delay: Duration.zero);
   }
 
   Future<void> removeFromQueue(int index) async {
@@ -1452,8 +1573,11 @@ class MusicAudioHandler extends BaseAudioHandler
 
     if (currentQueue.isEmpty) {
       mediaItem.add(null);
+      await _playbackSessionStore.clear();
       return;
     }
+
+    _schedulePersistPlaybackSession(delay: Duration.zero);
   }
 
   Future<void> moveQueueItem(int oldIndex, int newIndex) async {
@@ -1475,5 +1599,6 @@ class MusicAudioHandler extends BaseAudioHandler
 
     queue.add(currentQueue);
     await _playlist.move(oldIndex, newIndex);
+    _schedulePersistPlaybackSession(delay: Duration.zero);
   }
 }

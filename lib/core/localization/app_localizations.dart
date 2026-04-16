@@ -100,6 +100,8 @@ class AppLocalizations {
   String get newestAlbums => text('最新专辑', 'New Albums');
   String get recentlyPlayed => text('最近播放', 'Recently Played');
   String get noPlayHistory => text('暂无播放记录', 'No playback history yet');
+  String get pressBackAgainToExit =>
+      text('再按一次退出应用', 'Press back again to exit');
   String get noAlbums => text('暂无专辑', 'No albums yet');
   String get noSongs => text('暂无歌曲', 'No songs yet');
   String get songsLoadFailed => text('歌曲加载失败', 'Failed to load songs');
