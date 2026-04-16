@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
@@ -7,6 +7,8 @@ import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/network/subsonic_api_client.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/lyrics/data/lrc_parser.dart';
+import 'package:sonexa/features/lyrics/data/lyrics_text_normalizer.dart';
+import 'package:sonexa/features/lyrics/data/navidrome_native_lyrics_client.dart';
 import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
 
 class LyricsRepository {
@@ -19,36 +21,87 @@ class LyricsRepository {
   final SubsonicApiClient _api;
   final Dio _dio;
   final AppDatabase _database;
+  late final NavidromeNativeLyricsClient _nativeLyricsClient =
+      NavidromeNativeLyricsClient(
+        baseUrl: _api.baseUrl,
+        username: _api.username,
+        password: _api.password,
+      );
 
   void _diag(String message) {
     unawaited(DiagnosticLogger.instance.log(message));
   }
 
-  /// 先查本地缓存，再依次回退到不同歌词源。
   Future<Lyrics?> getLyrics(String songId, String artist, String title) async {
-    _diag('[DIAG][LYRICS] getLyrics: songId=$songId, artist="$artist", title="$title"');
+    _diag(
+      '[DIAG][LYRICS] getLyrics: songId=$songId, artist="$artist", title="$title"',
+    );
+
     final cachedLyrics = await _getCachedLyrics(songId);
-    if (cachedLyrics?.isSynced == true) {
+    final cachedLooksGarbled =
+        cachedLyrics != null && _lyricsLooksGarbled(cachedLyrics);
+    if (cachedLyrics?.isSynced == true && !cachedLooksGarbled) {
       _diag('[DIAG][LYRICS] getLyrics: hit synced cache');
       return cachedLyrics;
     }
+    if (cachedLooksGarbled) {
+      _diag(
+        '[DIAG][LYRICS] cached lyrics still look garbled; trying remote sources first',
+      );
+    }
 
-    Lyrics? fallbackLyrics = cachedLyrics?.isSynced == true ? null : cachedLyrics;
+    Lyrics? fallbackLyrics = cachedLyrics;
 
     final normalizedArtist = artist.trim();
     final normalizedTitle = title.trim();
 
+    var shouldTryNativeLyrics = cachedLooksGarbled;
+
     final songIdLyrics = await _fetchFromSongId(songId: songId);
-    if (songIdLyrics?.isSynced == true) {
-      final syncedSongIdLyrics = songIdLyrics!;
-      _diag('[DIAG][LYRICS] getLyrics: using songId synced lyrics');
-      await _cacheLyrics(syncedSongIdLyrics);
-      return syncedSongIdLyrics;
+    if (songIdLyrics != null) {
+      final garbled = _lyricsLooksGarbled(songIdLyrics);
+      if (songIdLyrics.isSynced && !garbled) {
+        _diag('[DIAG][LYRICS] getLyrics: using songId synced lyrics');
+        await _cacheLyrics(songIdLyrics);
+        return songIdLyrics;
+      }
+
+      if (garbled) {
+        _diag(
+          '[DIAG][LYRICS] songId lyrics still look garbled; keeping as fallback',
+        );
+        shouldTryNativeLyrics = true;
+      } else {
+        _diag(
+          '[DIAG][LYRICS] getLyrics: storing songId plain lyrics as fallback candidate',
+        );
+      }
+      fallbackLyrics = songIdLyrics;
+    } else {
+      shouldTryNativeLyrics = true;
     }
 
-    if (songIdLyrics != null && !songIdLyrics.isSynced) {
-      _diag('[DIAG][LYRICS] getLyrics: storing songId plain lyrics as fallback candidate');
-      fallbackLyrics = songIdLyrics;
+    if (shouldTryNativeLyrics) {
+      final nativeLyrics = await _fetchFromNavidromeNative(songId: songId);
+      if (nativeLyrics != null) {
+        final garbled = _lyricsLooksGarbled(nativeLyrics);
+        if (nativeLyrics.isSynced && !garbled) {
+          _diag('[DIAG][LYRICS] getLyrics: using Navidrome native lyrics');
+          await _cacheLyrics(nativeLyrics);
+          return nativeLyrics;
+        }
+
+        if (garbled) {
+          _diag(
+            '[DIAG][LYRICS] Navidrome native lyrics still look garbled; keeping existing fallback',
+          );
+        } else {
+          _diag(
+            '[DIAG][LYRICS] getLyrics: storing Navidrome native lyrics as fallback candidate',
+          );
+          fallbackLyrics = nativeLyrics;
+        }
+      }
     }
 
     if (normalizedArtist.isEmpty && normalizedTitle.isEmpty) {
@@ -61,15 +114,23 @@ class LyricsRepository {
       artist: normalizedArtist,
       title: normalizedTitle,
     );
-    if (navidromeLyrics?.isSynced == true) {
-      final syncedNavidromeLyrics = navidromeLyrics!;
-      _diag('[DIAG][LYRICS] getLyrics: using synced Navidrome lyrics');
-      await _cacheLyrics(syncedNavidromeLyrics);
-      return syncedNavidromeLyrics;
-    }
+    if (navidromeLyrics != null) {
+      final garbled = _lyricsLooksGarbled(navidromeLyrics);
+      if (navidromeLyrics.isSynced && !garbled) {
+        _diag('[DIAG][LYRICS] getLyrics: using synced Navidrome lyrics');
+        await _cacheLyrics(navidromeLyrics);
+        return navidromeLyrics;
+      }
 
-    if (navidromeLyrics != null && !navidromeLyrics.isSynced) {
-      _diag('[DIAG][LYRICS] getLyrics: storing plain Navidrome lyrics as fallback candidate');
+      if (garbled) {
+        _diag(
+          '[DIAG][LYRICS] Navidrome lyrics still look garbled; keeping as fallback',
+        );
+      } else {
+        _diag(
+          '[DIAG][LYRICS] getLyrics: storing plain Navidrome lyrics as fallback candidate',
+        );
+      }
       fallbackLyrics = navidromeLyrics;
     }
 
@@ -79,25 +140,30 @@ class LyricsRepository {
       title: normalizedTitle,
     );
     if (lrclibLyrics != null) {
-      _diag('[DIAG][LYRICS] getLyrics: using lrclib lyrics, synced=${lrclibLyrics.isSynced}');
+      _diag(
+        '[DIAG][LYRICS] getLyrics: using lrclib lyrics, synced=${lrclibLyrics.isSynced}',
+      );
       await _cacheLyrics(lrclibLyrics);
       return lrclibLyrics;
     }
 
     if (fallbackLyrics != null) {
-      _diag('[DIAG][LYRICS] getLyrics: returning fallback lyrics, synced=${fallbackLyrics.isSynced}');
+      _diag(
+        '[DIAG][LYRICS] getLyrics: returning fallback lyrics, synced=${fallbackLyrics.isSynced}, garbled=${_lyricsLooksGarbled(fallbackLyrics)}',
+      );
       await _cacheLyrics(fallbackLyrics);
     }
 
-    _diag('[DIAG][LYRICS] getLyrics: return ${fallbackLyrics == null ? 'null' : 'fallback'}');
+    _diag(
+      '[DIAG][LYRICS] getLyrics: return ${fallbackLyrics == null ? 'null' : 'fallback'}',
+    );
     return fallbackLyrics;
   }
 
-  /// 仅在缓存未过期时直接命中。
   Future<Lyrics?> _getCachedLyrics(String songId) async {
-    final cached = await (_database.select(_database.cachedLyrics)
-          ..where((table) => table.songId.equals(songId)))
-        .getSingleOrNull();
+    final cached =
+        await (_database.select(_database.cachedLyrics)
+          ..where((table) => table.songId.equals(songId))).getSingleOrNull();
     if (cached == null) {
       _diag('[DIAG][LYRICS] cache miss');
       return null;
@@ -110,20 +176,25 @@ class LyricsRepository {
 
     try {
       final decoded = jsonDecode(cached.linesJson) as List<dynamic>;
-      final lines = decoded
-          .map(
-            (item) => LyricLine.fromJson(
-              Map<String, dynamic>.from(item as Map<dynamic, dynamic>),
-            ),
-          )
-          .toList();
+      final lines =
+          decoded
+              .map(
+                (item) => LyricLine.fromJson(
+                  Map<String, dynamic>.from(item as Map<dynamic, dynamic>),
+                ),
+              )
+              .toList();
+      final normalizedLines = LyricsTextNormalizer.normalizeLines(lines);
 
       return Lyrics(
         songId: cached.songId,
         source: _parseLyricsSource(cached.source),
         isSynced: cached.isSynced,
-        lines: lines,
-        rawLrc: cached.rawLrc,
+        lines: normalizedLines,
+        rawLrc:
+            cached.rawLrc == null
+                ? null
+                : LyricsTextNormalizer.normalize(cached.rawLrc!),
       );
     } catch (_) {
       _diag('[DIAG][LYRICS] cache decode failed');
@@ -131,10 +202,11 @@ class LyricsRepository {
     }
   }
 
-  /// Navidrome 返回的 value 可能是同步 LRC，也可能是纯文本歌词。
   Future<Lyrics?> _fetchFromSongId({required String songId}) async {
     try {
-      final response = await _api.getLyricsBySongId(songId).timeout(_navidromeTimeout);
+      final response = await _api
+          .getLyricsBySongId(songId)
+          .timeout(_navidromeTimeout);
       if (response == null) {
         _diag('[DIAG][LYRICS] getLyricsBySongId returned null');
         return null;
@@ -142,25 +214,21 @@ class LyricsRepository {
 
       final syncedLines = response['line'];
       if (syncedLines is List && syncedLines.isNotEmpty) {
-        final lines = syncedLines
-            .whereType<Map>()
-            .map((entry) => Map<String, dynamic>.from(entry))
-            .map((entry) {
-              final text = (entry['value'] as String? ?? '').trim();
-              final start = (entry['start'] as int?) ?? 0;
-              return LyricLine(timeMs: start, text: text.isEmpty ? '…' : text);
-            })
-            .toList();
+        final lyrics = _buildStructuredLyrics(
+          songId: songId,
+          source: LyricsSource.tag,
+          payload: response,
+        );
 
-        if (lines.isNotEmpty) {
+        if (lyrics != null) {
+          if (_lyricsLooksGarbled(lyrics)) {
+            _diag(
+              '[DIAG][LYRICS] getLyricsBySongId structured lyrics still look garbled',
+            );
+          }
+
           _diag('[DIAG][LYRICS] getLyricsBySongId returned structured lines');
-          return Lyrics(
-            songId: songId,
-            source: LyricsSource.tag,
-            isSynced: true,
-            lines: lines,
-            rawLrc: null,
-          );
+          return lyrics;
         }
       }
 
@@ -185,7 +253,48 @@ class LyricsRepository {
     }
   }
 
-  /// Navidrome 返回的 value 可能是同步 LRC，也可能是纯文本歌词。
+  Future<Lyrics?> _fetchFromNavidromeNative({required String songId}) async {
+    try {
+      final payload = await _nativeLyricsClient
+          .getStructuredLyrics(songId)
+          .timeout(_navidromeTimeout + const Duration(seconds: 1));
+      if (payload == null || payload.isEmpty) {
+        _diag('[DIAG][LYRICS] Navidrome native returned empty lyrics');
+        return null;
+      }
+
+      Lyrics? garbledFallback;
+      for (final entry in payload) {
+        final lyrics = _buildStructuredLyrics(
+          songId: songId,
+          source: LyricsSource.tag,
+          payload: entry,
+        );
+        if (lyrics == null) {
+          continue;
+        }
+        if (!_lyricsLooksGarbled(lyrics)) {
+          _diag('[DIAG][LYRICS] Navidrome native returned clean lyrics');
+          return lyrics;
+        }
+        garbledFallback ??= lyrics;
+      }
+
+      if (garbledFallback != null) {
+        _diag('[DIAG][LYRICS] Navidrome native returned garbled lyrics');
+      } else {
+        _diag('[DIAG][LYRICS] Navidrome native returned unusable lyrics');
+      }
+      return garbledFallback;
+    } on TimeoutException {
+      _diag('[DIAG][LYRICS] Navidrome native request timed out');
+      return null;
+    } catch (_) {
+      _diag('[DIAG][LYRICS] Navidrome native request failed');
+      return null;
+    }
+  }
+
   Future<Lyrics?> _fetchFromNavidrome({
     required String songId,
     required String artist,
@@ -217,7 +326,6 @@ class LyricsRepository {
     }
   }
 
-  /// lrclib 优先使用同步歌词，失败时回退到纯文本歌词。
   Future<Lyrics?> _fetchFromLrclib({
     required String songId,
     required String artist,
@@ -227,10 +335,7 @@ class LyricsRepository {
       final response = await _dio
           .get<Map<String, dynamic>>(
             'get',
-            queryParameters: {
-              'artist_name': artist,
-              'track_name': title,
-            },
+            queryParameters: {'artist_name': artist, 'track_name': title},
           )
           .timeout(_lrclibTimeout);
 
@@ -272,23 +377,96 @@ class LyricsRepository {
     }
   }
 
-  /// 统一构建歌词实体，避免不同来源重复分支。
-  Lyrics _buildLyrics({
+  Lyrics? _buildLyrics({
     required String songId,
     required LyricsSource source,
     required String rawText,
   }) {
-    final isSynced = _containsTimestamp(rawText);
+    final normalizedRawText = LyricsTextNormalizer.normalize(rawText);
+    final isSynced = _containsTimestamp(normalizedRawText);
+    final lines = LyricsTextNormalizer.normalizeLines(
+      isSynced
+          ? parseLrc(normalizedRawText)
+          : _parsePlainLyrics(normalizedRawText),
+    );
+
+    if (lines.isEmpty) {
+      _diag(
+        '[DIAG][LYRICS] buildLyrics rejected empty lyrics: source=${source.name}',
+      );
+      return null;
+    }
+    if (LyricsTextNormalizer.linesLookGarbled(lines)) {
+      _diag(
+        '[DIAG][LYRICS] buildLyrics kept lyrics that still look garbled: source=${source.name}',
+      );
+    }
+
     return Lyrics(
       songId: songId,
       source: source,
       isSynced: isSynced,
-      lines: isSynced ? parseLrc(rawText) : _parsePlainLyrics(rawText),
-      rawLrc: rawText,
+      lines: lines,
+      rawLrc: normalizedRawText,
     );
   }
 
-  /// 纯文本歌词按行拆分，供非时间轴歌词展示。
+  Lyrics? _buildStructuredLyrics({
+    required String songId,
+    required LyricsSource source,
+    required Map<String, dynamic> payload,
+  }) {
+    final rawLines = payload['line'];
+    if (rawLines is! List || rawLines.isEmpty) {
+      return null;
+    }
+
+    var hasExplicitStart = false;
+    final lines = rawLines
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .map((entry) {
+          final startValue = entry['start'];
+          if (startValue != null) {
+            hasExplicitStart = true;
+          }
+          final text =
+              LyricsTextNormalizer.normalize(
+                entry['value']?.toString() ?? '',
+              ).trim();
+
+          return LyricLine(
+            timeMs: _startAsMilliseconds(startValue),
+            text: text.isEmpty ? '...' : text,
+          );
+        })
+        .toList(growable: false);
+
+    if (lines.isEmpty) {
+      return null;
+    }
+
+    final isSynced = payload['synced'] == true || hasExplicitStart;
+
+    return Lyrics(
+      songId: songId,
+      source: source,
+      isSynced: isSynced,
+      lines: lines,
+      rawLrc: isSynced ? null : lines.map((line) => line.text).join('\n'),
+    );
+  }
+
+  int _startAsMilliseconds(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.round();
+    }
+    return 0;
+  }
+
   List<LyricLine> _parsePlainLyrics(String rawText) {
     return rawText
         .split(RegExp(r'\r?\n'))
@@ -298,26 +476,33 @@ class LyricsRepository {
         .toList();
   }
 
-  /// 检查文本是否包含标准 LRC 时间戳。
   bool _containsTimestamp(String rawText) {
     return RegExp(r'\[(\d{2}):(\d{2})\.?((?:\d{0,3}))\]').hasMatch(rawText);
   }
 
-  /// 将歌词实体持久化到 Drift 缓存表。
-  Future<void> _cacheLyrics(Lyrics lyrics) async {
-    await _database.into(_database.cachedLyrics).insertOnConflictUpdate(
-      CachedLyricsCompanion.insert(
-        songId: lyrics.songId,
-        source: lyrics.source.name,
-        isSynced: lyrics.isSynced,
-        rawLrc: Value(lyrics.rawLrc),
-        linesJson: jsonEncode(lyrics.lines.map((line) => line.toJson()).toList()),
-        cachedAt: DateTime.now(),
-      ),
-    );
+  bool _lyricsLooksGarbled(Lyrics lyrics) {
+    return LyricsTextNormalizer.linesLookGarbled(lyrics.lines) ||
+        (lyrics.rawLrc != null &&
+            LyricsTextNormalizer.looksGarbled(lyrics.rawLrc!));
   }
 
-  /// 将缓存中的字符串枚举安全恢复为实体枚举。
+  Future<void> _cacheLyrics(Lyrics lyrics) async {
+    await _database
+        .into(_database.cachedLyrics)
+        .insertOnConflictUpdate(
+          CachedLyricsCompanion.insert(
+            songId: lyrics.songId,
+            source: lyrics.source.name,
+            isSynced: lyrics.isSynced,
+            rawLrc: Value(lyrics.rawLrc),
+            linesJson: jsonEncode(
+              lyrics.lines.map((line) => line.toJson()).toList(),
+            ),
+            cachedAt: DateTime.now(),
+          ),
+        );
+  }
+
   LyricsSource _parseLyricsSource(String rawSource) {
     return LyricsSource.values.firstWhere(
       (source) => source.name == rawSource,
@@ -325,7 +510,6 @@ class LyricsRepository {
     );
   }
 
-  /// 从 lrclib 搜索歌词候选列表，返回最多 [limit] 条结果。
   Future<List<Lyrics>> searchLrclib({
     required String songId,
     required String artist,
@@ -349,16 +533,20 @@ class LyricsRepository {
         final map = item as Map<String, dynamic>;
         final syncedLyrics = (map['syncedLyrics'] as String?)?.trim();
         final plainLyrics = (map['plainLyrics'] as String?)?.trim();
-        final rawText = (syncedLyrics?.isNotEmpty == true)
-            ? syncedLyrics!
-            : plainLyrics ?? '';
+        final rawText =
+            (syncedLyrics?.isNotEmpty == true)
+                ? syncedLyrics!
+                : plainLyrics ?? '';
         if (rawText.isEmpty) continue;
 
-        results.add(_buildLyrics(
+        final lyrics = _buildLyrics(
           songId: songId,
           source: LyricsSource.lrclib,
           rawText: rawText,
-        ));
+        );
+        if (lyrics != null) {
+          results.add(lyrics);
+        }
       }
       return results;
     } on DioException {
@@ -366,7 +554,6 @@ class LyricsRepository {
     }
   }
 
-  /// 用新歌词替换当前缓存的歌词（手动选择场景）。
   Future<void> replaceLyrics(Lyrics lyrics) async {
     await _cacheLyrics(lyrics);
   }
