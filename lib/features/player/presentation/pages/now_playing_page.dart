@@ -8,6 +8,7 @@ import 'package:sonexa/core/audio/audio_handler.dart' as ah;
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/widgets/song_actions_sheet.dart';
 import 'package:sonexa/features/lyrics/presentation/providers/lyrics_provider.dart';
@@ -313,18 +314,7 @@ class _ArtworkPage extends StatelessWidget {
         ),
         child: Hero(
           tag: 'now-playing-cover',
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child:
-                coverUrl != null && coverUrl!.isNotEmpty
-                    ? Image.network(
-                      coverUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder:
-                          (_, __, ___) => const Icon(Icons.album, size: 180),
-                    )
-                    : const Icon(Icons.album, size: 180),
-          ),
+          child: AppImage(url: coverUrl, size: 280, borderRadius: 20),
         ),
       ),
     );

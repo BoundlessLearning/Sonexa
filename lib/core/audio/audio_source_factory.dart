@@ -1,13 +1,18 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
+import 'package:sonexa/core/audio/song_audio_cache.dart';
+
 class AudioSourceFactory {
   const AudioSourceFactory();
 
   AudioSource fromMediaItem(MediaItem item) {
     final isLocal = item.extras?['isLocal'] == true;
     final uri = isLocal ? Uri.file(item.id) : Uri.parse(item.id);
-    return AudioSource.uri(uri, tag: item);
+    if (isLocal) {
+      return AudioSource.uri(uri, tag: item);
+    }
+    return SongAudioCache.instance.buildAudioSource(item);
   }
 
   bool isRawStreamItem(MediaItem item) {

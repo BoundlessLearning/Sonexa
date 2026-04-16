@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/formatters.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
 class QueuePage extends ConsumerWidget {
@@ -104,25 +105,11 @@ class QueuePage extends ConsumerWidget {
                               color: colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child:
-                                item.artUri != null
-                                    ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        item.artUri.toString(),
-                                        fit: BoxFit.cover,
-                                        errorBuilder:
-                                            (_, __, ___) => Icon(
-                                              Icons.music_note,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
-                                      ),
-                                    )
-                                    : Icon(
-                                      Icons.music_note,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
+                            child: AppImage(
+                              url: item.artUri?.toString(),
+                              size: 44,
+                              borderRadius: 8,
+                            ),
                           ),
                   title: Text(
                     item.title,

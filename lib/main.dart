@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sonexa/app.dart';
 import 'package:sonexa/core/audio/audio_handler.dart';
 import 'package:sonexa/core/audio/playback_session_store.dart';
+import 'package:sonexa/core/audio/song_audio_cache.dart';
 import 'package:sonexa/core/audio/windows_media_controls.dart';
 import 'package:sonexa/core/constants/app_branding.dart';
 import 'package:sonexa/core/database/app_database.dart';
@@ -41,6 +42,7 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       ImageCacheConfig.configure();
+      await SongAudioCache.instance.ensureInitialized();
       final bootstrapDatabase = AppDatabase();
       late final bool diagnosticsEnabled;
       try {

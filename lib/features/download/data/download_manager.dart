@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:collection/collection.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -12,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/error/app_error.dart';
 import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/core/utils/image_cache_key.dart';
 import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
 import 'package:sonexa/features/download/data/download_dao.dart';
 import 'package:sonexa/features/download/domain/entities/download_task.dart';
@@ -360,6 +362,7 @@ class DownloadManager {
         totalBytes: fileSize,
       );
       _errorByTaskId.remove(taskId);
+      unawaited(_prefetchSongArtwork(song));
       _scheduleEmit();
     } catch (error) {
       await _removeFileIfExists(filePath);
@@ -424,6 +427,9 @@ class DownloadManager {
         song: song,
       );
       if (isValid) {
+        unawaited(
+          _prefetchSongArtwork(song ?? await _getSongById(download.songId)),
+        );
         continue;
       }
 
@@ -541,6 +547,37 @@ class DownloadManager {
     final file = File(filePath);
     if (await file.exists()) {
       await file.delete();
+    }
+  }
+
+  Future<void> _prefetchSongArtwork(Song? song) async {
+    final coverArtId = song?.coverArtId?.trim();
+    if (coverArtId == null || coverArtId.isEmpty) {
+      return;
+    }
+
+    final cacheManager = DefaultCacheManager();
+    for (final size in const [300, 600]) {
+      final coverUrl = _apiClient.getCoverArtUrl(coverArtId, size: size);
+      if (coverUrl.isEmpty) {
+        continue;
+      }
+
+      final cacheKey = buildStableImageCacheKey(coverUrl);
+      if (cacheKey.isEmpty) {
+        continue;
+      }
+
+      try {
+        final cachedFile = await cacheManager.getFileFromCache(cacheKey);
+        if (cachedFile != null) {
+          continue;
+        }
+        await cacheManager.downloadFile(coverUrl, key: cacheKey);
+      } catch (_) {
+        // Artwork prefetch is best-effort; a failed image request should not
+        // break audio downloads or recovery of completed tasks.
+      }
     }
   }
 
