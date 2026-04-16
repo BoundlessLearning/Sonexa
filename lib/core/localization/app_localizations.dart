@@ -133,11 +133,17 @@ class AppLocalizations {
   String get playlistCreated => text('播放列表已创建', 'Playlist created');
   String get songListCreated => text('歌单已创建', 'Playlist created');
   String get clearAll => text('清空全部', 'Clear all');
+  String get batchDelete => text('批量删除', 'Batch delete');
   String get clearAllDownloads => text('清空全部下载', 'Clear all downloads');
   String get clearAllDownloadsMessage => text(
     '确定要删除所有下载任务吗？此操作不可撤销。',
     'Delete all download tasks? This cannot be undone.',
   );
+  String deleteSelectedDownloadsMessage(int count) => text(
+    '确定要删除选中的 $count 项下载吗？此操作不可撤销。',
+    'Delete the selected $count downloads? This cannot be undone.',
+  );
+  String selectedCount(int count) => text('已选 $count 项', '$count selected');
   String get confirm => text('确定', 'OK');
   String get noDownloads => text('暂无下载', 'No downloads yet');
   String get downloadingSection => text('进行中', 'In Progress');
@@ -196,6 +202,7 @@ class AppLocalizations {
   String get downloadSong => text('下载歌曲', 'Download Song');
   String get downloaded => text('已下载', 'Downloaded');
   String get checking => text('检查中', 'Checking');
+  String get downloading => text('下载中', 'Downloading');
   String downloadStarted(String title) =>
       text('已开始下载: $title', 'Download started: $title');
   String getPlaylistFailed(Object error) =>
@@ -282,8 +289,18 @@ class AppLocalizations {
   String get copyPath => text('复制路径', 'Copy path');
   String get downloadDirectoryCopied =>
       text('下载目录已复制', 'Download folder copied');
+  String get cacheUsage => text('缓存占用', 'Cache usage');
+  String get cacheUsageDescription => text(
+    '查看图片缓存和歌曲缓存的占用，并按需清理。',
+    'Review image and song cache usage, and clear them when needed.',
+  );
+  String get imageCacheUsage => text('图片缓存', 'Image cache');
+  String get songCacheUsage => text('歌曲缓存', 'Song cache');
   String get clearImageCache => text('清除图片缓存', 'Clear image cache');
+  String get clearSongCache => text('清除歌曲缓存', 'Clear song cache');
   String get cacheCleared => text('缓存已清除', 'Cache cleared');
+  String get imageCacheCleared => text('图片缓存已清除', 'Image cache cleared');
+  String get songCacheCleared => text('歌曲缓存已清除', 'Song cache cleared');
   String get downloadManager => text('下载管理', 'Downloads');
   String get diagnostics => text('诊断与反馈', 'Diagnostics');
   String get diagnosticLogging => text('诊断日志', 'Diagnostic logging');

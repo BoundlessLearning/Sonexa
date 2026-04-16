@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sonexa/core/audio/media_item_converter.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/core/widgets/app_image.dart';
+import 'package:sonexa/features/download/domain/entities/download_task.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 import 'package:sonexa/features/library/domain/entities/playlist.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
@@ -69,7 +71,7 @@ Future<void> showSongActionsSheet(
   }
 }
 
-class _SongActionsSheet extends ConsumerWidget {
+class _SongActionsSheet extends ConsumerStatefulWidget {
   const _SongActionsSheet({
     required this.parentContext,
     required this.song,
@@ -83,29 +85,67 @@ class _SongActionsSheet extends ConsumerWidget {
   final bool showAddToQueueAction;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final downloadedPathAsync = ref.watch(downloadedSongPathProvider(song.id));
-    final isDownloaded = downloadedPathAsync.valueOrNull != null;
-    final isCheckingDownload = downloadedPathAsync.isLoading;
+  ConsumerState<_SongActionsSheet> createState() => _SongActionsSheetState();
+}
+
+class _SongActionsSheetState extends ConsumerState<_SongActionsSheet> {
+  _SongDownloadUiState? _optimisticDownloadState;
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<List<DownloadTask>>>(downloadListProvider, (_, next) {
+      final tasks = next.valueOrNull ?? const <DownloadTask>[];
+      final downloadedPathAsync = ref.read(
+        downloadedSongPathProvider(widget.song.id),
+      );
+      final currentDownload = _findCurrentDownload(tasks);
+      final nextState = _resolveDownloadUiState(
+        currentDownload: currentDownload,
+        downloadedPath: downloadedPathAsync.valueOrNull,
+        isCheckingPath: downloadedPathAsync.isLoading,
+      );
+
+      if (_optimisticDownloadState != nextState && mounted) {
+        setState(() {
+          _optimisticDownloadState = nextState;
+        });
+      }
+
+      if (currentDownload?.status == DownloadStatus.completed) {
+        ref.invalidate(downloadedSongPathProvider(widget.song.id));
+      }
+    });
+
+    final downloadTasks =
+        ref.watch(downloadListProvider).valueOrNull ?? const <DownloadTask>[];
+    final downloadedPathAsync = ref.watch(
+      downloadedSongPathProvider(widget.song.id),
+    );
+    final currentDownload = _findCurrentDownload(downloadTasks);
+    final downloadUiState =
+        _optimisticDownloadState ??
+        _resolveDownloadUiState(
+          currentDownload: currentDownload,
+          downloadedPath: downloadedPathAsync.valueOrNull,
+          isCheckingPath: downloadedPathAsync.isLoading,
+        );
     final colorScheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
 
     Future<void> startDownload() async {
+      setState(() {
+        _optimisticDownloadState = _SongDownloadUiState.downloading;
+      });
       final manager = await ref.read(downloadManagerProvider.future);
-      await manager.enqueueDownload(song);
-      ref.invalidate(downloadedSongPathProvider(song.id));
-      if (parentContext.mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          SnackBar(content: Text(l10n.downloadStarted(song.title))),
-        );
-      }
+      await manager.enqueueDownload(widget.song);
+      ref.invalidate(downloadedSongPathProvider(widget.song.id));
     }
 
     Future<void> openPlaylistPicker() async {
       Navigator.of(context).pop();
       await showDialog<void>(
-        context: parentContext,
-        builder: (dialogContext) => _PlaylistPickerDialog(song: song),
+        context: widget.parentContext,
+        builder: (dialogContext) => _PlaylistPickerDialog(song: widget.song),
       );
     }
 
@@ -118,19 +158,21 @@ class _SongActionsSheet extends ConsumerWidget {
       } else {
         api = await ref.read(subsonicApiClientProvider.future);
       }
-      final coverArtUrl = api.getCoverArtUrl(song.coverArtId, size: 300);
+      final coverArtUrl = api.getCoverArtUrl(widget.song.coverArtId, size: 300);
       final streamUrl = api.getStreamUrl(
-        song.id,
-        format: song.preferredPlaybackFormat,
+        widget.song.id,
+        format: widget.song.preferredPlaybackFormat,
       );
       final resolvedCoverUrl =
-          coverUrl == null || coverUrl!.isEmpty ? coverArtUrl : coverUrl!;
-      final item = song.toMediaItem(streamUrl, resolvedCoverUrl);
+          widget.coverUrl == null || widget.coverUrl!.isEmpty
+              ? coverArtUrl
+              : widget.coverUrl!;
+      final item = widget.song.toMediaItem(streamUrl, resolvedCoverUrl);
       await ref.read(audioHandlerProvider).playNext(item);
       navigator.pop();
-      if (parentContext.mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          SnackBar(content: Text(_playNextFeedbackLabel(parentContext))),
+      if (widget.parentContext.mounted) {
+        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+          SnackBar(content: Text(_playNextFeedbackLabel(widget.parentContext))),
         );
       }
     }
@@ -151,18 +193,10 @@ class _SongActionsSheet extends ConsumerWidget {
                     color: colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child:
-                        coverUrl != null && coverUrl!.isNotEmpty
-                            ? Image.network(
-                              coverUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (_, __, ___) =>
-                                      const Icon(Icons.album_rounded, size: 36),
-                            )
-                            : const Icon(Icons.album_rounded, size: 36),
+                  child: AppImage(
+                    url: widget.coverUrl,
+                    size: 72,
+                    borderRadius: 18,
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -171,7 +205,7 @@ class _SongActionsSheet extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        song.title,
+                        widget.song.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -180,7 +214,7 @@ class _SongActionsSheet extends ConsumerWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        song.artist,
+                        widget.song.artist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -196,7 +230,7 @@ class _SongActionsSheet extends ConsumerWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showAddToQueueAction)
+                if (widget.showAddToQueueAction)
                   Expanded(
                     child: _QuickActionItem(
                       icon: Icons.queue_music_rounded,
@@ -204,21 +238,27 @@ class _SongActionsSheet extends ConsumerWidget {
                       onTap: playNext,
                     ),
                   ),
-                if (showAddToQueueAction) const SizedBox(width: 8),
+                if (widget.showAddToQueueAction) const SizedBox(width: 8),
                 Expanded(
                   child: _QuickActionItem(
                     icon:
-                        isDownloaded
+                        downloadUiState == _SongDownloadUiState.downloaded
                             ? Icons.check_circle_rounded
+                            : downloadUiState ==
+                                _SongDownloadUiState.downloading
+                            ? Icons.downloading_rounded
                             : Icons.download_rounded,
                     label:
-                        isCheckingDownload
+                        downloadUiState == _SongDownloadUiState.checking
                             ? l10n.checking
-                            : isDownloaded
+                            : downloadUiState == _SongDownloadUiState.downloaded
                             ? l10n.downloaded
+                            : downloadUiState ==
+                                _SongDownloadUiState.downloading
+                            ? l10n.downloading
                             : _downloadActionLabel(context),
                     onTap:
-                        isDownloaded || isCheckingDownload
+                        downloadUiState != _SongDownloadUiState.idle
                             ? null
                             : startDownload,
                   ),
@@ -246,9 +286,12 @@ class _SongActionsSheet extends ConsumerWidget {
                   _InfoTile(
                     icon: Icons.album_rounded,
                     label: l10n.album,
-                    value: song.album.isEmpty ? l10n.unknownAlbum : song.album,
+                    value:
+                        widget.song.album.isEmpty
+                            ? l10n.unknownAlbum
+                            : widget.song.album,
                     onTap:
-                        song.albumId.isEmpty
+                        widget.song.albumId.isEmpty
                             ? null
                             : () => Navigator.of(
                               context,
@@ -258,9 +301,12 @@ class _SongActionsSheet extends ConsumerWidget {
                     icon: Icons.person_rounded,
                     label: l10n.artist,
                     value:
-                        song.artist.isEmpty ? l10n.unknownArtist : song.artist,
+                        widget.song.artist.isEmpty
+                            ? l10n.unknownArtist
+                            : widget.song.artist,
                     onTap:
-                        song.artistId.isEmpty && song.artist.isEmpty
+                        widget.song.artistId.isEmpty &&
+                                widget.song.artist.isEmpty
                             ? null
                             : () => Navigator.of(
                               context,
@@ -274,7 +320,36 @@ class _SongActionsSheet extends ConsumerWidget {
       ),
     );
   }
+
+  DownloadTask? _findCurrentDownload(List<DownloadTask> tasks) {
+    return tasks.cast<DownloadTask?>().firstWhere(
+      (task) => task?.songId == widget.song.id,
+      orElse: () => null,
+    );
+  }
+
+  _SongDownloadUiState _resolveDownloadUiState({
+    required DownloadTask? currentDownload,
+    required String? downloadedPath,
+    required bool isCheckingPath,
+  }) {
+    final status = currentDownload?.status;
+    if (status == DownloadStatus.completed || downloadedPath != null) {
+      return _SongDownloadUiState.downloaded;
+    }
+    if (status == DownloadStatus.pending ||
+        status == DownloadStatus.downloading ||
+        status == DownloadStatus.paused) {
+      return _SongDownloadUiState.downloading;
+    }
+    if (isCheckingPath && currentDownload == null) {
+      return _SongDownloadUiState.checking;
+    }
+    return _SongDownloadUiState.idle;
+  }
 }
+
+enum _SongDownloadUiState { idle, checking, downloading, downloaded }
 
 enum _SongActionsResult { openAlbum, openArtist }
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:sonexa/core/audio/song_audio_cache.dart';
 import 'package:sonexa/core/database/daos/settings_dao.dart';
 import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
@@ -327,18 +329,11 @@ class SettingsPage extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.cleaning_services_outlined),
-                  title: Text(l10n.clearImageCache),
+                  leading: const Icon(Icons.pie_chart_outline_rounded),
+                  title: Text(l10n.cacheUsage),
+                  subtitle: Text(l10n.cacheUsageDescription),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    PaintingBinding.instance.imageCache.clear();
-                    PaintingBinding.instance.imageCache.clearLiveImages();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.cacheCleared)),
-                      );
-                    }
-                  },
+                  onTap: () => _showCacheUsageDialog(context),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -500,6 +495,283 @@ class SettingsPage extends ConsumerWidget {
         SnackBar(content: Text(l10n.diagnosticLogExportFailed(error))),
       );
     }
+  }
+
+  Future<void> _showCacheUsageDialog(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      final usage = await _loadCacheUsageSnapshot();
+      if (!context.mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _CacheUsageDialog(initialUsage: usage),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.loadFailed(error))));
+    }
+  }
+}
+
+class _CacheUsageSnapshot {
+  const _CacheUsageSnapshot({
+    required this.imageCacheBytes,
+    required this.songCacheBytes,
+  });
+
+  final int imageCacheBytes;
+  final int songCacheBytes;
+}
+
+Future<_CacheUsageSnapshot> _loadCacheUsageSnapshot() async {
+  await SongAudioCache.instance.ensureInitialized();
+  final imageCacheBytes = await DefaultCacheManager().store.getCacheSize();
+  final songCacheBytes = await SongAudioCache.instance.usageBytes();
+  return _CacheUsageSnapshot(
+    imageCacheBytes: imageCacheBytes,
+    songCacheBytes: songCacheBytes,
+  );
+}
+
+class _CacheUsageDialog extends StatefulWidget {
+  const _CacheUsageDialog({required this.initialUsage});
+
+  final _CacheUsageSnapshot initialUsage;
+
+  @override
+  State<_CacheUsageDialog> createState() => _CacheUsageDialogState();
+}
+
+class _CacheUsageDialogState extends State<_CacheUsageDialog> {
+  late _CacheUsageSnapshot _usage;
+  _CacheTarget? _clearingTarget;
+
+  @override
+  void initState() {
+    super.initState();
+    _usage = widget.initialUsage;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return AlertDialog(
+      title: Text(l10n.cacheUsage),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 320, maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _CacheUsageRow(
+                icon: Icons.image_outlined,
+                title: l10n.imageCacheUsage,
+                usage: _formatBytes(_usage.imageCacheBytes),
+                actionLabel: l10n.clearImageCache,
+                busy: _clearingTarget == _CacheTarget.image,
+                onPressed: () => _clearImageCache(context),
+              ),
+              const SizedBox(height: 12),
+              _CacheUsageRow(
+                icon: Icons.audio_file_outlined,
+                title: l10n.songCacheUsage,
+                usage: _formatBytes(_usage.songCacheBytes),
+                actionLabel: l10n.clearSongCache,
+                busy: _clearingTarget == _CacheTarget.song,
+                onPressed: () => _clearSongCache(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _clearImageCache(BuildContext context) async {
+    await _runClearAction(
+      context,
+      target: _CacheTarget.image,
+      action: () async {
+        await DefaultCacheManager().emptyCache();
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+      },
+      successMessage: AppLocalizations.of(context).imageCacheCleared,
+    );
+  }
+
+  Future<void> _clearSongCache(BuildContext context) async {
+    await _runClearAction(
+      context,
+      target: _CacheTarget.song,
+      action: () => SongAudioCache.instance.clear(),
+      successMessage: AppLocalizations.of(context).songCacheCleared,
+    );
+  }
+
+  Future<void> _runClearAction(
+    BuildContext context, {
+    required _CacheTarget target,
+    required Future<void> Function() action,
+    required String successMessage,
+  }) async {
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (_clearingTarget != null) {
+      return;
+    }
+
+    setState(() {
+      _clearingTarget = target;
+    });
+
+    try {
+      await action();
+      if (!mounted) {
+        return;
+      }
+      final updatedUsage = await _loadCacheUsageSnapshot();
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+      setState(() {
+        _usage = updatedUsage;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(SnackBar(content: Text(l10n.loadFailed(error))));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _clearingTarget = null;
+        });
+      }
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var value = bytes.toDouble();
+    var unitIndex = 0;
+
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex++;
+    }
+
+    final precision = unitIndex == 0 ? 0 : 1;
+    return '${value.toStringAsFixed(precision)} ${units[unitIndex]}';
+  }
+}
+
+enum _CacheTarget { image, song }
+
+class _CacheUsageRow extends StatelessWidget {
+  const _CacheUsageRow({
+    required this.icon,
+    required this.title,
+    required this.usage,
+    required this.actionLabel,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String usage;
+  final String actionLabel;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: colorScheme.onSecondaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Text(
+                      usage,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.tonal(
+              onPressed: busy ? null : onPressed,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child:
+                  busy
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : Text(actionLabel),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

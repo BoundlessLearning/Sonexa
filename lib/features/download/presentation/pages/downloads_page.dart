@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:audio_service/audio_service.dart';
+import 'dart:io';
 
+import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
+import 'package:sonexa/core/database/daos/song_dao.dart';
 import 'package:sonexa/features/download/domain/entities/download_task.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
+import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 
 /// 下载管理页 — 展示所有下载任务，支持取消、重试、删除操作
 class DownloadsPage extends ConsumerWidget {
@@ -144,20 +150,35 @@ class _ErrorView extends StatelessWidget {
 }
 
 // ── 下载列表视图 ───────────────────────────────────────────────
-class _DownloadListView extends ConsumerWidget {
+class _DownloadListView extends ConsumerStatefulWidget {
   const _DownloadListView({required this.tasks});
 
   final List<DownloadTask> tasks;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DownloadListView> createState() => _DownloadListViewState();
+}
+
+class _DownloadListViewState extends ConsumerState<_DownloadListView> {
+  final Set<String> _selectedCompletedTaskIds = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
     // 将下载任务分为活跃（下载中/等待中/失败）和已完成两组
     final activeTasks =
-        tasks.where((t) => t.status != DownloadStatus.completed).toList();
+        widget.tasks
+            .where((t) => t.status != DownloadStatus.completed)
+            .toList();
     final completedTasks =
-        tasks.where((t) => t.status == DownloadStatus.completed).toList();
+        widget.tasks
+            .where((t) => t.status == DownloadStatus.completed)
+            .toList();
+    final validCompletedIds = completedTasks.map((task) => task.id).toSet();
+    _selectedCompletedTaskIds.removeWhere(
+      (taskId) => !validCompletedIds.contains(taskId),
+    );
 
     return ListView(
       children: [
@@ -174,9 +195,14 @@ class _DownloadListView extends ConsumerWidget {
 
         // ── 已完成 ────────────────────────────────────────────
         if (completedTasks.isNotEmpty) ...[
-          _SectionHeader(
+          _CompletedSectionHeader(
             title: l10n.completedSection,
             count: completedTasks.length,
+            selectedCount: _selectedCompletedTaskIds.length,
+            onBatchDelete:
+                _selectedCompletedTaskIds.isEmpty
+                    ? null
+                    : () => _confirmDeleteSelected(context),
           ),
           ...completedTasks.map(
             (task) => Dismissible(
@@ -190,8 +216,22 @@ class _DownloadListView extends ConsumerWidget {
               ),
               onDismissed: (_) {
                 ref.read(downloadManagerProvider).valueOrNull?.delete(task.id);
+                setState(() {
+                  _selectedCompletedTaskIds.remove(task.id);
+                });
               },
-              child: _DownloadTaskTile(task: task),
+              child: _DownloadTaskTile(
+                task: task,
+                selected: _selectedCompletedTaskIds.contains(task.id),
+                onSelectedChanged:
+                    (selected) => setState(() {
+                      if (selected) {
+                        _selectedCompletedTaskIds.add(task.id);
+                      } else {
+                        _selectedCompletedTaskIds.remove(task.id);
+                      }
+                    }),
+              ),
             ),
           ),
         ],
@@ -199,6 +239,55 @@ class _DownloadListView extends ConsumerWidget {
         const SizedBox(height: 32),
       ],
     );
+  }
+
+  Future<void> _confirmDeleteSelected(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final selectedTaskIds = _selectedCompletedTaskIds.toList(growable: false);
+    if (selectedTaskIds.isEmpty) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: Text(l10n.batchDelete),
+            content: Text(
+              l10n.deleteSelectedDownloadsMessage(selectedTaskIds.length),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(l10n.delete),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final manager = ref.read(downloadManagerProvider).valueOrNull;
+    if (manager == null) {
+      return;
+    }
+
+    for (final taskId in selectedTaskIds) {
+      await manager.delete(taskId);
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedCompletedTaskIds.clear();
+    });
   }
 }
 
@@ -224,11 +313,67 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _CompletedSectionHeader extends StatelessWidget {
+  const _CompletedSectionHeader({
+    required this.title,
+    required this.count,
+    required this.selectedCount,
+    this.onBatchDelete,
+  });
+
+  final String title;
+  final int count;
+  final int selectedCount;
+  final VoidCallback? onBatchDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$title ($count)',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          if (selectedCount > 0) ...[
+            Text(
+              l10n.selectedCount(selectedCount),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          TextButton.icon(
+            onPressed: onBatchDelete,
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: Text(l10n.batchDelete),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── 单个下载任务项 ─────────────────────────────────────────────
 class _DownloadTaskTile extends ConsumerWidget {
-  const _DownloadTaskTile({super.key, required this.task});
+  const _DownloadTaskTile({
+    super.key,
+    required this.task,
+    this.selected = false,
+    this.onSelectedChanged,
+  });
 
   final DownloadTask task;
+  final bool selected;
+  final ValueChanged<bool>? onSelectedChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -239,7 +384,7 @@ class _DownloadTaskTile extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ListTile(
-          leading: _buildStatusIcon(colorScheme),
+          leading: _buildLeading(colorScheme),
           title: Text(task.title, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             '${task.artist} · ${_statusText(l10n)}',
@@ -249,6 +394,10 @@ class _DownloadTaskTile extends ConsumerWidget {
               color: colorScheme.onSurfaceVariant,
             ),
           ),
+          onTap:
+              task.status == DownloadStatus.completed
+                  ? () => _playDownloadedTask(context, ref)
+                  : null,
           trailing: _buildActionButton(context, ref, colorScheme),
         ),
         // 下载中状态显示进度条
@@ -259,6 +408,20 @@ class _DownloadTaskTile extends ConsumerWidget {
           ),
       ],
     );
+  }
+
+  Widget _buildLeading(ColorScheme colorScheme) {
+    if (task.status == DownloadStatus.completed) {
+      return Checkbox(
+        value: selected,
+        onChanged:
+            onSelectedChanged == null
+                ? null
+                : (value) => onSelectedChanged!(value ?? false),
+      );
+    }
+
+    return _buildStatusIcon(colorScheme);
   }
 
   Widget _buildStatusIcon(ColorScheme colorScheme) {
@@ -350,6 +513,58 @@ class _DownloadTaskTile extends ConsumerWidget {
                   .valueOrNull
                   ?.resume(task.id),
         );
+    }
+  }
+
+  Future<void> _playDownloadedTask(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+
+    try {
+      final database = ref.read(databaseProvider);
+      final cachedSong = await SongDao(database).getSongById(task.songId);
+      final localPath =
+          cachedSong?.localFilePath?.trim().isNotEmpty == true
+              ? cachedSong!.localFilePath!.trim()
+              : task.localPath?.trim();
+
+      if (localPath == null || localPath.isEmpty) {
+        throw StateError('Downloaded file path is missing');
+      }
+
+      final file = File(localPath);
+      if (!await file.exists()) {
+        throw StateError('Downloaded file does not exist');
+      }
+
+      final api = await ref.read(subsonicApiClientProvider.future);
+      final coverUrl = api.getCoverArtUrl(cachedSong?.coverArtId, size: 300);
+      final item = MediaItem(
+        id: localPath,
+        title: cachedSong?.title ?? task.title,
+        artist: cachedSong?.artist ?? task.artist,
+        album: cachedSong?.album ?? '',
+        artUri: coverUrl.isEmpty ? null : Uri.tryParse(coverUrl),
+        duration: Duration(seconds: cachedSong?.duration ?? 0),
+        extras: {
+          'songId': cachedSong?.id ?? task.songId,
+          'albumId': cachedSong?.albumId ?? '',
+          'artistId': cachedSong?.artistId ?? '',
+          'hasLocalFile': true,
+          'isLocal': true,
+          'sourceSuffix': cachedSong?.suffix,
+          'streamFormat': 'raw',
+          'fallbackFormat': 'raw',
+        },
+      );
+
+      await ref.read(audioHandlerProvider).loadAndPlay([item]);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.loadFailed(error))));
     }
   }
 }
