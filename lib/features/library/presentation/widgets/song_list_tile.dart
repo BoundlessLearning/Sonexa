@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/widgets/song_context_menu.dart';
 
-class SongListTile extends ConsumerWidget {
+class SongListTile extends StatelessWidget {
   const SongListTile({
     super.key,
     required this.song,
@@ -31,7 +31,7 @@ class SongListTile extends ConsumerWidget {
   final bool showContextMenu;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -41,15 +41,19 @@ class SongListTile extends ConsumerWidget {
           showContextMenu
               ? (details) => SongContextMenu.show(
                 context,
-                ref,
                 song: song,
+                coverUrl: coverArtUrl,
                 tapPosition: details.globalPosition,
               )
               : null,
       // 移动端：长按弹出底部菜单
       onLongPress:
           showContextMenu
-              ? () => SongContextMenu.show(context, ref, song: song)
+              ? () => SongContextMenu.show(
+                context,
+                song: song,
+                coverUrl: coverArtUrl,
+              )
               : null,
       child: ListTile(
         leading: AppImage(url: coverArtUrl, size: 48, borderRadius: 8),
@@ -78,7 +82,12 @@ class SongListTile extends ConsumerWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
                 iconSize: 20,
-                onPressed: () => SongContextMenu.show(context, ref, song: song),
+                onPressed:
+                    () => SongContextMenu.show(
+                      context,
+                      song: song,
+                      coverUrl: coverArtUrl,
+                    ),
                 tooltip: AppLocalizations.of(context).more,
               ),
             Text(

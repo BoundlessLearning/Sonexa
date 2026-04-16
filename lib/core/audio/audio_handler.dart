@@ -1553,6 +1553,33 @@ class MusicAudioHandler extends BaseAudioHandler
     _schedulePersistPlaybackSession(delay: Duration.zero);
   }
 
+  Future<void> playNext(MediaItem item) async {
+    final currentQueue = [...queue.value];
+    final insertIndex =
+        currentQueue.isEmpty
+            ? 0
+            : (_currentIndex + 1).clamp(0, currentQueue.length);
+
+    currentQueue.insert(insertIndex, item);
+    queue.add(currentQueue);
+
+    if (insertIndex >= _playlist.length) {
+      await _playlist.add(_audioSourceFromItem(item));
+    } else {
+      await _playlist.insert(insertIndex, _audioSourceFromItem(item));
+    }
+
+    if (_playbackModeController.shuffleEnabled) {
+      final originalInsertIndex =
+          _originalQueue.isEmpty
+              ? 0
+              : (_currentIndex + 1).clamp(0, _originalQueue.length);
+      _originalQueue.insert(originalInsertIndex, item);
+    }
+
+    _schedulePersistPlaybackSession(delay: Duration.zero);
+  }
+
   Future<void> removeFromQueue(int index) async {
     final currentQueue = [...queue.value];
     if (index < 0 || index >= currentQueue.length) {

@@ -145,6 +145,40 @@ final routerProvider = Provider<GoRouter>((ref) {
                           playlistId: state.pathParameters['id']!,
                         ),
                   ),
+                  GoRoute(
+                    path: 'album-songs/:id',
+                    pageBuilder: (context, state) {
+                      final l10n = AppLocalizations.of(context);
+                      return fadeTransition(
+                        key: ValueKey(
+                          'album-songs-${state.pathParameters['id']}-${state.uri.query}',
+                        ),
+                        child: FilteredSongListPage.album(
+                          albumId: state.pathParameters['id']!,
+                          title:
+                              state.uri.queryParameters['title'] ??
+                              l10n.albumSongs,
+                        ),
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'artist-songs',
+                    pageBuilder: (context, state) {
+                      final l10n = AppLocalizations.of(context);
+                      return fadeTransition(
+                        key: ValueKey('artist-songs-${state.uri.query}'),
+                        child: FilteredSongListPage.artist(
+                          artistId: state.uri.queryParameters['artistId'] ?? '',
+                          artistName:
+                              state.uri.queryParameters['artistName'] ?? '',
+                          title:
+                              state.uri.queryParameters['title'] ??
+                              l10n.artistSongs,
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ],
@@ -177,6 +211,37 @@ final routerProvider = Provider<GoRouter>((ref) {
               key: state.pageKey,
               child: const NowPlayingPage(),
             ),
+        routes: [
+          GoRoute(
+            path: 'album-songs/:id',
+            pageBuilder: (context, state) {
+              final l10n = AppLocalizations.of(context);
+              return fadeTransition(
+                key: ValueKey(
+                  'now-playing-album-songs-${state.pathParameters['id']}-${state.uri.query}',
+                ),
+                child: FilteredSongListPage.album(
+                  albumId: state.pathParameters['id']!,
+                  title: state.uri.queryParameters['title'] ?? l10n.albumSongs,
+                ),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'artist-songs',
+            pageBuilder: (context, state) {
+              final l10n = AppLocalizations.of(context);
+              return fadeTransition(
+                key: ValueKey('now-playing-artist-songs-${state.uri.query}'),
+                child: FilteredSongListPage.artist(
+                  artistId: state.uri.queryParameters['artistId'] ?? '',
+                  artistName: state.uri.queryParameters['artistName'] ?? '',
+                  title: state.uri.queryParameters['title'] ?? l10n.artistSongs,
+                ),
+              );
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/queue',
@@ -191,35 +256,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               key: state.pageKey,
               child: const DownloadsPage(),
             ),
-      ),
-      GoRoute(
-        path: '/album-songs/:id',
-        pageBuilder: (context, state) {
-          final l10n = AppLocalizations.of(context);
-          return fadeTransition(
-            key: ValueKey(
-              'album-songs-${state.pathParameters['id']}-${state.uri.query}',
-            ),
-            child: FilteredSongListPage.album(
-              albumId: state.pathParameters['id']!,
-              title: state.uri.queryParameters['title'] ?? l10n.albumSongs,
-            ),
-          );
-        },
-      ),
-      GoRoute(
-        path: '/artist-songs',
-        pageBuilder: (context, state) {
-          final l10n = AppLocalizations.of(context);
-          return fadeTransition(
-            key: ValueKey('artist-songs-${state.uri.query}'),
-            child: FilteredSongListPage.artist(
-              artistId: state.uri.queryParameters['artistId'] ?? '',
-              artistName: state.uri.queryParameters['artistName'] ?? '',
-              title: state.uri.queryParameters['title'] ?? l10n.artistSongs,
-            ),
-          );
-        },
       ),
       GoRoute(
         path: '/lyrics-search',
