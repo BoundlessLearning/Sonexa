@@ -55,7 +55,7 @@ class PlaylistDetailPage extends ConsumerWidget {
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: l10n.deletePlaylist,
+                    tooltip: l10n.deleteSongList,
                     onPressed: () => _confirmDelete(context, ref, playlist.id),
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -350,12 +350,12 @@ class PlaylistDetailPage extends ConsumerWidget {
         context: context,
         builder:
             (dialogContext) => AlertDialog(
-              title: Text(l10n.editPlaylist),
+              title: Text(l10n.editSongList),
               content: TextField(
                 controller: controller,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                decoration: InputDecoration(labelText: l10n.playlistName),
+                decoration: InputDecoration(labelText: l10n.songListName),
                 onSubmitted: (value) {
                   Navigator.of(dialogContext).pop(value.trim());
                 },
@@ -398,7 +398,7 @@ class PlaylistDetailPage extends ConsumerWidget {
 
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l10n.playlistUpdated)));
+      ).showSnackBar(SnackBar(content: Text(l10n.songListUpdated)));
     } finally {
       controller.dispose();
     }
@@ -414,7 +414,7 @@ class PlaylistDetailPage extends ConsumerWidget {
       context: context,
       builder:
           (dialogContext) => AlertDialog(
-            title: Text(l10n.deletePlaylist),
+            title: Text(l10n.deleteSongList),
             content: Text(l10n.deleteCannotUndo),
             actions: [
               TextButton(
@@ -450,6 +450,6 @@ class PlaylistDetailPage extends ConsumerWidget {
     context.pop();
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(l10n.playlistDeleted)));
+    ).showSnackBar(SnackBar(content: Text(l10n.songListDeleted)));
   }
 }

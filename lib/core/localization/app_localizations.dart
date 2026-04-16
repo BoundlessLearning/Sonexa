@@ -86,6 +86,7 @@ class AppLocalizations {
   String get albums => text('专辑', 'Albums');
   String get artists => text('艺术家', 'Artists');
   String get playlists => text('播放列表', 'Playlists');
+  String get songLists => text('歌单', 'Playlists');
   String songCount(int count) => text('$count 首歌曲', '$count songs');
   String albumCount(int count) => text('$count 张专辑', '$count albums');
 
@@ -107,6 +108,7 @@ class AppLocalizations {
   String get songsLoadFailed => text('歌曲加载失败', 'Failed to load songs');
   String get noArtists => text('暂无艺术家', 'No artists yet');
   String get noPlaylists => text('暂无播放列表', 'No playlists yet');
+  String get noSongLists => text('暂无歌单', 'No playlists yet');
 
   String get searchHint =>
       text('搜索歌曲、专辑、艺术家...', 'Search songs, albums, artists...');
@@ -120,13 +122,16 @@ class AppLocalizations {
   String get noSearchResults => text('未找到相关结果', 'No results found');
 
   String get createPlaylist => text('新建播放列表', 'New Playlist');
+  String get createSongList => text('新建歌单', 'New Playlist');
   String get playlistName => text('播放列表名称', 'Playlist name');
+  String get songListName => text('歌单名称', 'Playlist name');
   String get enterName => text('请输入名称', 'Enter a name');
   String get cancel => text('取消', 'Cancel');
   String get create => text('创建', 'Create');
   String createFailed(Object error) =>
       text('创建失败：$error', 'Create failed: $error');
   String get playlistCreated => text('播放列表已创建', 'Playlist created');
+  String get songListCreated => text('歌单已创建', 'Playlist created');
   String get clearAll => text('清空全部', 'Clear all');
   String get clearAllDownloads => text('清空全部下载', 'Clear all downloads');
   String get clearAllDownloadsMessage => text(
@@ -195,6 +200,8 @@ class AppLocalizations {
       text('已开始下载: $title', 'Download started: $title');
   String getPlaylistFailed(Object error) =>
       text('获取播放列表失败: $error', 'Failed to load playlists: $error');
+  String songListLoadFailed(Object error) =>
+      text('获取歌单失败: $error', 'Failed to load playlists: $error');
   String get noPlaylistCreateFirst =>
       text('暂无播放列表，请先创建一个。', 'No playlists yet. Create one first.');
   String get noSongListCreateFirst =>
@@ -211,16 +218,20 @@ class AppLocalizations {
   String get albumsLoadFailed => text('无法加载专辑', 'Failed to load albums');
   String get editName => text('编辑名称', 'Edit name');
   String get editPlaylist => text('编辑播放列表', 'Edit Playlist');
+  String get editSongList => text('编辑歌单', 'Edit Playlist');
   String get deletePlaylist => text('删除播放列表', 'Delete Playlist');
+  String get deleteSongList => text('删除歌单', 'Delete Playlist');
   String get save => text('保存', 'Save');
   String updateFailed(Object error) =>
       text('更新失败：$error', 'Update failed: $error');
   String get playlistUpdated => text('播放列表已更新', 'Playlist updated');
+  String get songListUpdated => text('歌单已更新', 'Playlist updated');
   String get deleteCannotUndo =>
       text('删除后无法恢复，确定继续吗？', 'This cannot be undone. Continue?');
   String deleteFailed(Object error) =>
       text('删除失败：$error', 'Delete failed: $error');
   String get playlistDeleted => text('播放列表已删除', 'Playlist deleted');
+  String get songListDeleted => text('歌单已删除', 'Playlist deleted');
   String get adjustLyrics => text('调整歌词', 'Adjust Lyrics');
   String get adjustLyricsDescription =>
       text('微调歌词与歌曲进度的同步', 'Fine-tune lyrics timing');

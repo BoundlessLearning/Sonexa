@@ -54,7 +54,7 @@ class PlaylistsTab extends ConsumerWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
                   const SizedBox(height: 120),
-                  Center(child: Text(l10n.noPlaylists)),
+                  Center(child: Text(l10n.noSongLists)),
                 ],
               ),
             );
@@ -99,65 +99,102 @@ class PlaylistsTab extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
   ) async {
-    final controller = TextEditingController();
     final l10n = AppLocalizations.of(context);
 
-    try {
-      final name = await showDialog<String>(
-        context: context,
-        builder:
-            (dialogContext) => AlertDialog(
-              title: Text(l10n.createPlaylist),
-              content: TextField(
-                controller: controller,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                decoration: InputDecoration(
-                  labelText: l10n.playlistName,
-                  hintText: l10n.enterName,
-                ),
-                onSubmitted: (value) {
-                  Navigator.of(dialogContext).pop(value.trim());
-                },
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(l10n.cancel),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop(controller.text.trim());
-                  },
-                  child: Text(l10n.create),
-                ),
-              ],
-            ),
-      );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => const _CreateSongListDialog(),
+    );
 
-      if (name == null || name.isEmpty || !context.mounted) {
-        return;
-      }
-
-      await ref
-          .read(playlistCrudNotifierProvider.notifier)
-          .createPlaylist(name);
-
-      final crudState = ref.read(playlistCrudNotifierProvider);
-      if (!context.mounted) return;
-
-      if (crudState.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.createFailed(crudState.error ?? ''))),
-        );
-        return;
-      }
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.playlistCreated)));
-    } finally {
-      controller.dispose();
+    if (name == null || name.isEmpty || !context.mounted) {
+      return;
     }
+
+    await ref.read(playlistCrudNotifierProvider.notifier).createPlaylist(name);
+
+    final crudState = ref.read(playlistCrudNotifierProvider);
+    if (!context.mounted) return;
+
+    if (crudState.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.createFailed(crudState.error ?? ''))),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.songListCreated)));
+  }
+}
+
+class _CreateSongListDialog extends StatefulWidget {
+  const _CreateSongListDialog();
+
+  @override
+  State<_CreateSongListDialog> createState() => _CreateSongListDialogState();
+}
+
+class _CreateSongListDialogState extends State<_CreateSongListDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+    _controller.addListener(_handleTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_handleTextChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTextChanged() {
+    setState(() {});
+  }
+
+  bool get _canSubmit => _controller.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (!_canSubmit) {
+      return;
+    }
+    Navigator.of(context).pop(_controller.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
+    return AlertDialog(
+      title: Text(l10n.createSongList),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: l10n.songListName,
+          hintText: l10n.enterName,
+        ),
+        onSubmitted: (_) {
+          if (_canSubmit) {
+            _submit();
+          }
+        },
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(
+          onPressed: _canSubmit ? _submit : null,
+          child: Text(l10n.create),
+        ),
+      ],
+    );
   }
 }

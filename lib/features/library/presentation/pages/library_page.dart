@@ -30,7 +30,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               Tab(text: l10n.albums, icon: const Icon(Icons.album_rounded)),
               Tab(text: l10n.artists, icon: const Icon(Icons.person_rounded)),
               Tab(
-                text: l10n.playlists,
+                text: l10n.songLists,
                 icon: const Icon(Icons.queue_music_rounded),
               ),
             ],
