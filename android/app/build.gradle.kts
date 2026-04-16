@@ -39,6 +39,27 @@ android {
     }
 }
 
+val exportReleaseApkAsSonexa by tasks.registering {
+    doLast {
+        val candidateApks = listOf(
+            layout.buildDirectory.file("outputs/flutter-apk/app-release.apk").get().asFile,
+            layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile,
+        )
+
+        val sourceApk = candidateApks.firstOrNull { it.exists() } ?: return@doLast
+        val exportDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+        if (!exportDir.exists()) {
+            exportDir.mkdirs()
+        }
+
+        sourceApk.copyTo(exportDir.resolve("sonexa.apk"), overwrite = true)
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(exportReleaseApkAsSonexa)
+}
+
 flutter {
     source = "../.."
 }
