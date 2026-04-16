@@ -4,15 +4,62 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:sonexa/core/database/daos/settings_dao.dart';
+import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
+  (ref) => ThemeModeNotifier(ref)..load(),
+);
 final languageModeProvider =
     StateNotifierProvider<LanguageModeNotifier, AppLanguage>(
       (ref) => LanguageModeNotifier(ref)..load(),
     );
+
+class ThemeModeNotifier extends StateNotifier<ThemeMode> {
+  ThemeModeNotifier(this._ref, {ThemeMode initial = ThemeMode.system})
+    : super(initial);
+
+  static const _settingKey = 'app_theme_mode';
+
+  final Ref _ref;
+
+  static ThemeMode fromStorageValue(String? rawValue) {
+    return switch (rawValue) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  static String toStorageValue(ThemeMode themeMode) {
+    return switch (themeMode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    };
+  }
+
+  static Future<ThemeMode> loadStoredThemeMode(AppDatabase database) async {
+    final rawValue = await SettingsDao(database).getSetting(_settingKey);
+    return fromStorageValue(rawValue);
+  }
+
+  Future<void> load() async {
+    final themeMode = await loadStoredThemeMode(_ref.read(databaseProvider));
+    if (mounted) {
+      state = themeMode;
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode themeMode) async {
+    state = themeMode;
+    await SettingsDao(
+      _ref.read(databaseProvider),
+    ).setSetting(_settingKey, toStorageValue(themeMode));
+  }
+}
 
 class LanguageModeNotifier extends StateNotifier<AppLanguage> {
   LanguageModeNotifier(this._ref) : super(AppLanguage.system);
@@ -102,55 +149,36 @@ class SettingsPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      l10n.appLanguage,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.translate_rounded),
+                      title: Text(l10n.appLanguage),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 140),
+                            child: Text(
+                              _languageLabel(l10n, languageMode),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      ),
+                      onTap:
+                          () => _showLanguageDialog(context, ref, languageMode),
                     ),
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 8.0;
-                        final itemWidth =
-                            (constraints.maxWidth - spacing * 2) / 3;
-
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: spacing,
-                          children: [
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.settings_suggest_outlined,
-                              label: l10n.followSystem,
-                              selected: languageMode == AppLanguage.system,
-                              onTap:
-                                  () => ref
-                                      .read(languageModeProvider.notifier)
-                                      .setLanguage(AppLanguage.system),
-                            ),
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.translate_rounded,
-                              label: l10n.chinese,
-                              selected: languageMode == AppLanguage.zh,
-                              onTap:
-                                  () => ref
-                                      .read(languageModeProvider.notifier)
-                                      .setLanguage(AppLanguage.zh),
-                            ),
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.language_rounded,
-                              label: l10n.english,
-                              selected: languageMode == AppLanguage.en,
-                              onTap:
-                                  () => ref
-                                      .read(languageModeProvider.notifier)
-                                      .setLanguage(AppLanguage.en),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
                     const SizedBox(height: 20),
                     Text(
                       l10n.themeMode,
@@ -173,10 +201,9 @@ class SettingsPage extends ConsumerWidget {
                               label: l10n.followSystem,
                               selected: themeMode == ThemeMode.system,
                               onTap:
-                                  () =>
-                                      ref
-                                          .read(themeModeProvider.notifier)
-                                          .state = ThemeMode.system,
+                                  () => ref
+                                      .read(themeModeProvider.notifier)
+                                      .setThemeMode(ThemeMode.system),
                             ),
                             _SettingChoiceOption(
                               width: itemWidth,
@@ -184,10 +211,9 @@ class SettingsPage extends ConsumerWidget {
                               label: l10n.lightTheme,
                               selected: themeMode == ThemeMode.light,
                               onTap:
-                                  () =>
-                                      ref
-                                          .read(themeModeProvider.notifier)
-                                          .state = ThemeMode.light,
+                                  () => ref
+                                      .read(themeModeProvider.notifier)
+                                      .setThemeMode(ThemeMode.light),
                             ),
                             _SettingChoiceOption(
                               width: itemWidth,
@@ -195,10 +221,9 @@ class SettingsPage extends ConsumerWidget {
                               label: l10n.darkTheme,
                               selected: themeMode == ThemeMode.dark,
                               onTap:
-                                  () =>
-                                      ref
-                                          .read(themeModeProvider.notifier)
-                                          .state = ThemeMode.dark,
+                                  () => ref
+                                      .read(themeModeProvider.notifier)
+                                      .setThemeMode(ThemeMode.dark),
                             ),
                           ],
                         );
@@ -297,6 +322,58 @@ class SettingsPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showLanguageDialog(
+    BuildContext context,
+    WidgetRef ref,
+    AppLanguage currentLanguage,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final selectedLanguage = await showDialog<AppLanguage>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(l10n.appLanguage),
+            contentPadding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+            content: RadioGroup<AppLanguage>(
+              groupValue: currentLanguage,
+              onChanged: (value) => Navigator.of(context).pop(value),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children:
+                    AppLanguage.values
+                        .map(
+                          (language) => RadioListTile<AppLanguage>(
+                            value: language,
+                            title: Text(_languageLabel(l10n, language)),
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+            ],
+          ),
+    );
+
+    if (selectedLanguage == null || selectedLanguage == currentLanguage) {
+      return;
+    }
+
+    await ref.read(languageModeProvider.notifier).setLanguage(selectedLanguage);
+  }
+
+  String _languageLabel(AppLocalizations l10n, AppLanguage language) {
+    return switch (language) {
+      AppLanguage.system => l10n.followSystem,
+      AppLanguage.zh => l10n.chinese,
+      AppLanguage.en => l10n.english,
+    };
   }
 }
 

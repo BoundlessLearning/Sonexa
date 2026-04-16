@@ -166,7 +166,7 @@ class MusicAudioHandler extends BaseAudioHandler
         'mp3Fallback.setAudioSource',
       );
       _currentIndex = index;
-      await _withTimeout(_player.play(), 'mp3Fallback.play');
+      await _startPlayback('mp3Fallback.play');
       _diag(
         '[DIAG][STREAM] mp3 fallback SUCCEEDED: '
         '${_describeStreamForLog(fallbackItem)}',
@@ -187,6 +187,45 @@ class MusicAudioHandler extends BaseAudioHandler
                 '$operation timed out after ${_playerOperationTimeout.inSeconds}s',
               ),
     );
+  }
+
+  Future<void> _startPlayback(String operation) async {
+    final errorCompleter = Completer<void>();
+
+    try {
+      unawaited(
+        _player.play().catchError((Object error, StackTrace stackTrace) {
+          if (!errorCompleter.isCompleted) {
+            errorCompleter.completeError(error, stackTrace);
+          }
+          _diag(
+            '[DIAG] $operation async play FAILED: $error',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }),
+      );
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+
+    if (_player.playing) {
+      return;
+    }
+
+    final startedFuture = _player.playingStream
+        .firstWhere((playing) => playing)
+        .timeout(
+          _playerOperationTimeout,
+          onTimeout:
+              () =>
+                  throw TimeoutException(
+                    '$operation did not enter playing state after '
+                    '${_playerOperationTimeout.inSeconds}s',
+                  ),
+        );
+
+    await Future.any<void>([startedFuture, errorCompleter.future]);
   }
 
   void _startSeekGuard({
@@ -597,7 +636,7 @@ class MusicAudioHandler extends BaseAudioHandler
     );
 
     if (resumeAfterSeek && !_player.playing) {
-      await _player.play();
+      await _startPlayback('_transitionToIndex.play');
     }
   }
 
@@ -780,7 +819,7 @@ class MusicAudioHandler extends BaseAudioHandler
             initialIndex: initialIndex + 1,
           );
           _currentIndex = initialIndex + 1;
-          await _player.play();
+          await _startPlayback('loadAndPlay.retry.play');
         } catch (retryError, retrySt) {
           _diag(
             '[DIAG] Retry also failed: $retryError',
@@ -823,7 +862,7 @@ class MusicAudioHandler extends BaseAudioHandler
     }
 
     try {
-      await _withTimeout(_player.play(), 'play');
+      await _startPlayback('play');
       _diag('[DIAG] play() succeeded');
     } catch (e, st) {
       _diag('[DIAG] play() FAILED: $e', error: e, stackTrace: st);
@@ -1119,7 +1158,7 @@ class MusicAudioHandler extends BaseAudioHandler
           '_retryCurrentTrack.seek',
         );
       }
-      await _withTimeout(_player.play(), '_retryCurrentTrack.play');
+      await _startPlayback('_retryCurrentTrack.play');
       _diag('[DIAG] _retryCurrentTrack SUCCEEDED');
       _clearSeekGuard('_retryCurrentTrack-succeeded');
     } catch (e, st) {
@@ -1192,7 +1231,7 @@ class MusicAudioHandler extends BaseAudioHandler
       _currentIndex = safeIdx;
 
       if (shouldResume) {
-        await _withTimeout(_player.play(), '_attemptRecovery.play');
+        await _startPlayback('_attemptRecovery.play');
       }
       _diag(
         '[DIAG] _attemptRecovery SUCCEEDED: '
@@ -1238,7 +1277,7 @@ class MusicAudioHandler extends BaseAudioHandler
       );
       // forceSkip 是最后兜底手段，但当前曲目发布仍统一交给 sequenceState。
       _currentIndex = index;
-      await _withTimeout(_player.play(), '_forceSkipToIndex.play');
+      await _startPlayback('_forceSkipToIndex.play');
       _diag('[DIAG] _forceSkipToIndex($index) SUCCEEDED');
     } catch (e, st) {
       _diag(
