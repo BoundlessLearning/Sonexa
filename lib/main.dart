@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
@@ -40,7 +41,19 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       ImageCacheConfig.configure();
-      await DiagnosticLogger.instance.init(overwrite: true);
+      final bootstrapDatabase = AppDatabase();
+      late final bool diagnosticsEnabled;
+      try {
+        diagnosticsEnabled = await DiagnosticLoggingNotifier.loadStoredValue(
+          bootstrapDatabase,
+        );
+      } finally {
+        await bootstrapDatabase.close();
+      }
+      await DiagnosticLogger.instance.init(
+        overwrite: !kReleaseMode,
+        enabled: diagnosticsEnabled,
+      );
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);

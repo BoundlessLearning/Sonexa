@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sonexa/core/database/daos/settings_dao.dart';
 import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/localization/app_localizations.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sonexa/features/download/presentation/providers/download_provider.dart';
 
@@ -15,6 +16,13 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>(
 final languageModeProvider =
     StateNotifierProvider<LanguageModeNotifier, AppLanguage>(
       (ref) => LanguageModeNotifier(ref)..load(),
+    );
+final diagnosticLoggingProvider =
+    StateNotifierProvider<DiagnosticLoggingNotifier, bool>(
+      (ref) => DiagnosticLoggingNotifier(
+        ref,
+        initial: DiagnosticLoggingNotifier.defaultValue,
+      )..load(),
     );
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
@@ -85,6 +93,47 @@ class LanguageModeNotifier extends StateNotifier<AppLanguage> {
   }
 }
 
+class DiagnosticLoggingNotifier extends StateNotifier<bool> {
+  DiagnosticLoggingNotifier(this._ref, {required bool initial})
+    : super(initial);
+
+  static const _settingKey = 'diagnostic_logging_enabled';
+
+  final Ref _ref;
+
+  static bool get defaultValue => false;
+
+  static bool fromStorageValue(String? rawValue) {
+    return switch (rawValue) {
+      '1' || 'true' => true,
+      '0' || 'false' => false,
+      _ => defaultValue,
+    };
+  }
+
+  static String toStorageValue(bool enabled) => enabled ? '1' : '0';
+
+  static Future<bool> loadStoredValue(AppDatabase database) async {
+    final rawValue = await SettingsDao(database).getSetting(_settingKey);
+    return fromStorageValue(rawValue);
+  }
+
+  Future<void> load() async {
+    final enabled = await loadStoredValue(_ref.read(databaseProvider));
+    if (mounted) {
+      state = enabled;
+    }
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    await SettingsDao(
+      _ref.read(databaseProvider),
+    ).setSetting(_settingKey, toStorageValue(enabled));
+    await DiagnosticLogger.instance.setEnabled(enabled, overwrite: enabled);
+  }
+}
+
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -92,6 +141,7 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final languageMode = ref.watch(languageModeProvider);
+    final diagnosticLoggingEnabled = ref.watch(diagnosticLoggingProvider);
     final serverAsync = ref.watch(activeServerProvider);
     final downloadDirectoryAsync = ref.watch(downloadDirectoryInfoProvider);
     final errorColor = Theme.of(context).colorScheme.error;
@@ -102,221 +152,260 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: [
           _SectionHeader(title: l10n.serverInfo),
-          serverAsync.when(
-            loading:
-                () => ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: Text(l10n.loading),
-                ),
-            error:
-                (error, _) => ListTile(
-                  leading: const Icon(Icons.error_outline),
-                  title: Text(l10n.serverInfo),
-                  subtitle: Text(l10n.loadFailed(error)),
-                ),
-            data: (server) {
-              if (server == null) {
-                return ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: Text(l10n.noServer),
-                );
-              }
-
-              return Column(
-                children: [
-                  ListTile(
+          _SectionCard(
+            child: serverAsync.when(
+              loading:
+                  () => ListTile(
                     leading: const Icon(Icons.dns_outlined),
-                    title: Text(l10n.serverAddress),
-                    subtitle: Text(server.baseUrl),
+                    title: Text(l10n.loading),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(l10n.username),
-                    subtitle: Text(server.username),
+              error:
+                  (error, _) => ListTile(
+                    leading: const Icon(Icons.error_outline),
+                    title: Text(l10n.serverInfo),
+                    subtitle: Text(l10n.loadFailed(error)),
                   ),
-                ],
-              );
-            },
-          ),
-          const Divider(),
-          _SectionHeader(title: l10n.appearance),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              data: (server) {
+                if (server == null) {
+                  return ListTile(
+                    leading: const Icon(Icons.dns_outlined),
+                    title: Text(l10n.noServer),
+                  );
+                }
+
+                return Column(
                   children: [
                     ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.translate_rounded),
-                      title: Text(l10n.appLanguage),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 140),
-                            child: Text(
-                              _languageLabel(l10n, languageMode),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.end,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.chevron_right_rounded),
-                        ],
-                      ),
-                      onTap:
-                          () => _showLanguageDialog(context, ref, languageMode),
+                      leading: const Icon(Icons.dns_outlined),
+                      title: Text(l10n.serverAddress),
+                      subtitle: Text(server.baseUrl),
                     ),
-                    const SizedBox(height: 8),
                     const Divider(height: 1),
-                    const SizedBox(height: 20),
-                    Text(
-                      l10n.themeMode,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 8.0;
-                        final itemWidth =
-                            (constraints.maxWidth - spacing * 2) / 3;
-
-                        return Wrap(
-                          spacing: spacing,
-                          runSpacing: spacing,
-                          children: [
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.settings_suggest_outlined,
-                              label: l10n.followSystem,
-                              selected: themeMode == ThemeMode.system,
-                              onTap:
-                                  () => ref
-                                      .read(themeModeProvider.notifier)
-                                      .setThemeMode(ThemeMode.system),
-                            ),
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.light_mode_outlined,
-                              label: l10n.lightTheme,
-                              selected: themeMode == ThemeMode.light,
-                              onTap:
-                                  () => ref
-                                      .read(themeModeProvider.notifier)
-                                      .setThemeMode(ThemeMode.light),
-                            ),
-                            _SettingChoiceOption(
-                              width: itemWidth,
-                              icon: Icons.dark_mode_outlined,
-                              label: l10n.darkTheme,
-                              selected: themeMode == ThemeMode.dark,
-                              onTap:
-                                  () => ref
-                                      .read(themeModeProvider.notifier)
-                                      .setThemeMode(ThemeMode.dark),
-                            ),
-                          ],
-                        );
-                      },
+                    ListTile(
+                      leading: const Icon(Icons.person_outline),
+                      title: Text(l10n.username),
+                      subtitle: Text(server.username),
                     ),
                   ],
-                ),
+                );
+              },
+            ),
+          ),
+          _SectionHeader(title: l10n.appearance),
+          _SectionCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.translate_rounded),
+                    title: Text(l10n.appLanguage),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 140),
+                          child: Text(
+                            _languageLabel(l10n, languageMode),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
+                    ),
+                    onTap:
+                        () => _showLanguageDialog(context, ref, languageMode),
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  const SizedBox(height: 20),
+                  Text(
+                    l10n.themeMode,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      const spacing = 8.0;
+                      final itemWidth =
+                          (constraints.maxWidth - spacing * 2) / 3;
+
+                      return Wrap(
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: [
+                          _SettingChoiceOption(
+                            width: itemWidth,
+                            icon: Icons.settings_suggest_outlined,
+                            label: l10n.followSystem,
+                            selected: themeMode == ThemeMode.system,
+                            onTap:
+                                () => ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.system),
+                          ),
+                          _SettingChoiceOption(
+                            width: itemWidth,
+                            icon: Icons.light_mode_outlined,
+                            label: l10n.lightTheme,
+                            selected: themeMode == ThemeMode.light,
+                            onTap:
+                                () => ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.light),
+                          ),
+                          _SettingChoiceOption(
+                            width: itemWidth,
+                            icon: Icons.dark_mode_outlined,
+                            label: l10n.darkTheme,
+                            selected: themeMode == ThemeMode.dark,
+                            onTap:
+                                () => ref
+                                    .read(themeModeProvider.notifier)
+                                    .setThemeMode(ThemeMode.dark),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
           ),
-          const Divider(),
           _SectionHeader(title: l10n.downloadsAndCache),
-          downloadDirectoryAsync.when(
-            loading:
-                () => ListTile(
-                  leading: const Icon(Icons.folder_open_rounded),
-                  title: Text(l10n.downloadDirectory),
-                  subtitle: Text(l10n.loading),
+          _SectionCard(
+            child: Column(
+              children: [
+                downloadDirectoryAsync.when(
+                  loading:
+                      () => ListTile(
+                        leading: const Icon(Icons.folder_open_rounded),
+                        title: Text(l10n.downloadDirectory),
+                        subtitle: Text(l10n.loading),
+                      ),
+                  error:
+                      (error, _) => ListTile(
+                        leading: const Icon(Icons.error_outline),
+                        title: Text(l10n.downloadDirectory),
+                        subtitle: Text(l10n.loadFailed(error)),
+                      ),
+                  data:
+                      (directoryInfo) => ListTile(
+                        leading: const Icon(Icons.folder_open_rounded),
+                        title: Text(l10n.downloadDirectory),
+                        subtitle: Text(
+                          '${directoryInfo.isPublic ? l10n.publicDownloadDirectory : l10n.privateAppDirectory}\n${directoryInfo.path}',
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.copy_rounded),
+                          tooltip: l10n.copyPath,
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: directoryInfo.path),
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(l10n.downloadDirectoryCopied),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ),
                 ),
-            error:
-                (error, _) => ListTile(
-                  leading: const Icon(Icons.error_outline),
-                  title: Text(l10n.downloadDirectory),
-                  subtitle: Text(l10n.loadFailed(error)),
-                ),
-            data:
-                (directoryInfo) => ListTile(
-                  leading: const Icon(Icons.folder_open_rounded),
-                  title: Text(l10n.downloadDirectory),
-                  subtitle: Text(
-                    '${directoryInfo.isPublic ? l10n.publicDownloadDirectory : l10n.privateAppDirectory}\n${directoryInfo.path}',
-                  ),
-                  isThreeLine: true,
-                  trailing: IconButton(
-                    icon: const Icon(Icons.copy_rounded),
-                    tooltip: l10n.copyPath,
-                    onPressed: () async {
-                      await Clipboard.setData(
-                        ClipboardData(text: directoryInfo.path),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services_outlined),
+                  title: Text(l10n.clearImageCache),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    PaintingBinding.instance.imageCache.clear();
+                    PaintingBinding.instance.imageCache.clearLiveImages();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.cacheCleared)),
                       );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.downloadDirectoryCopied)),
-                        );
-                      }
-                    },
-                  ),
+                    }
+                  },
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.download_rounded),
+                  title: Text(l10n.downloadManager),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/downloads'),
+                ),
+              ],
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.cleaning_services_outlined),
-            title: Text(l10n.clearImageCache),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              PaintingBinding.instance.imageCache.clear();
-              PaintingBinding.instance.imageCache.clearLiveImages();
-              if (context.mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(l10n.cacheCleared)));
-              }
-            },
+          _SectionHeader(title: l10n.diagnostics),
+          _SectionCard(
+            child: Column(
+              children: [
+                SwitchListTile.adaptive(
+                  secondary: const Icon(Icons.bug_report_outlined),
+                  title: Text(l10n.diagnosticLogging),
+                  subtitle: Text(l10n.diagnosticLoggingDescription),
+                  value: diagnosticLoggingEnabled,
+                  onChanged:
+                      (value) => ref
+                          .read(diagnosticLoggingProvider.notifier)
+                          .setEnabled(value),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.upload_file_outlined),
+                  title: Text(l10n.exportDiagnosticLog),
+                  subtitle: Text(l10n.exportDiagnosticLogDescription),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _exportDiagnosticLog(context, ref),
+                ),
+              ],
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.download_rounded),
-            title: Text(l10n.downloadManager),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/downloads'),
-          ),
-          const Divider(),
           _SectionHeader(title: l10n.account),
-          ListTile(
-            leading: Icon(Icons.logout, color: errorColor),
-            title: Text(l10n.logout, style: TextStyle(color: errorColor)),
-            onTap: () async {
-              await ref.read(authStateProvider.notifier).logout();
-              if (context.mounted) {
-                context.go('/login');
-              }
-            },
+          _SectionCard(
+            child: ListTile(
+              leading: Icon(Icons.logout, color: errorColor),
+              title: Text(l10n.logout, style: TextStyle(color: errorColor)),
+              onTap: () async {
+                await ref.read(authStateProvider.notifier).logout();
+                if (context.mounted) {
+                  context.go('/login');
+                }
+              },
+            ),
           ),
-          const Divider(),
           _SectionHeader(title: l10n.about),
-          ListTile(
-            leading: const Icon(Icons.music_note),
-            title: Text(l10n.appName),
-            subtitle: Text('${l10n.slogan}\n${l10n.version}'),
-            isThreeLine: true,
-          ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(l10n.projectInfo),
-            subtitle: Text(l10n.positioning),
+          _SectionCard(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.music_note),
+                  title: Text(l10n.appName),
+                  subtitle: Text('${l10n.slogan}\n${l10n.version}'),
+                  isThreeLine: true,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(l10n.projectInfo),
+                  subtitle: Text(l10n.positioning),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 32),
         ],
@@ -375,6 +464,43 @@ class SettingsPage extends ConsumerWidget {
       AppLanguage.en => l10n.english,
     };
   }
+
+  Future<void> _exportDiagnosticLog(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+
+    try {
+      final directoryInfo = await ref.read(
+        downloadDirectoryInfoProvider.future,
+      );
+      final exportedFile = await DiagnosticLogger.instance.exportLog(
+        targetDirectoryPath: directoryInfo.path,
+        fileName: 'sonexa-diagnostic.log',
+      );
+
+      if (!context.mounted) {
+        return;
+      }
+
+      if (exportedFile == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.noDiagnosticLogToExport)));
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.diagnosticLogExported(exportedFile.path))),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.diagnosticLogExportFailed(error))),
+      );
+    }
+  }
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -393,6 +519,20 @@ class _SectionHeader extends StatelessWidget {
           color: Theme.of(context).colorScheme.primary,
         ),
       ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Card(margin: EdgeInsets.zero, child: child),
     );
   }
 }

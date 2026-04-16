@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// 应用级诊断日志落盘工具。
@@ -15,21 +16,59 @@ class DiagnosticLogger {
   static final DiagnosticLogger instance = DiagnosticLogger._();
 
   File? _logFile;
+  bool _enabled = false;
   Future<void> _pendingWrite = Future.value();
   final DiagnosticEventFormatter _eventFormatter =
       const DiagnosticEventFormatter();
 
   String? get logFilePath => _logFile?.path;
+  bool get isEnabled => _enabled;
 
-  Future<void> init({bool overwrite = true}) async {
+  Future<void> init({bool overwrite = true, bool enabled = true}) async {
+    _enabled = enabled;
+    if (!enabled) {
+      return;
+    }
+
+    await _prepareLogFile(overwrite: overwrite);
+  }
+
+  Future<void> setEnabled(bool enabled, {bool overwrite = false}) async {
+    _enabled = enabled;
+    if (!enabled) {
+      return;
+    }
+
+    await _prepareLogFile(overwrite: overwrite || _logFile == null);
+  }
+
+  Future<File?> exportLog({
+    required String targetDirectoryPath,
+    String? fileName,
+  }) async {
+    final sourceFile = await _resolveLogFile(createIfMissing: false);
+    if (sourceFile == null || !sourceFile.existsSync()) {
+      return null;
+    }
+
+    final targetDirectory = Directory(targetDirectoryPath);
+    if (!targetDirectory.existsSync()) {
+      targetDirectory.createSync(recursive: true);
+    }
+
+    final exportName =
+        fileName ??
+        'sonexa-diagnostic-${DateTime.now().millisecondsSinceEpoch}.log';
+    final targetFile = File(p.join(targetDirectory.path, exportName));
+    return sourceFile.copy(targetFile.path);
+  }
+
+  Future<void> _prepareLogFile({bool overwrite = true}) async {
     try {
-      final appDir = await getApplicationSupportDirectory();
-      final logDir = Directory('${appDir.path}/logs');
-      if (!logDir.existsSync()) {
-        logDir.createSync(recursive: true);
+      _logFile = await _resolveLogFile(createIfMissing: true);
+      if (_logFile == null) {
+        return;
       }
-
-      _logFile = File('${logDir.path}/diagnostic.log');
       if (overwrite && _logFile!.existsSync()) {
         _logFile!.writeAsStringSync('');
       } else if (!_logFile!.existsSync()) {
@@ -41,7 +80,23 @@ class DiagnosticLogger {
     }
   }
 
+  Future<File?> _resolveLogFile({required bool createIfMissing}) async {
+    final appDir = await getApplicationSupportDirectory();
+    final logDir = Directory('${appDir.path}/logs');
+    if (!logDir.existsSync()) {
+      if (!createIfMissing) {
+        return null;
+      }
+      logDir.createSync(recursive: true);
+    }
+
+    return File(p.join(logDir.path, 'diagnostic.log'));
+  }
+
   Future<void> log(String message) async {
+    if (!_enabled) {
+      return;
+    }
     stdout.writeln(message);
     await _writeLine('${DateTime.now().toIso8601String()} $message');
   }
@@ -61,6 +116,9 @@ class DiagnosticLogger {
   }
 
   Future<void> captureConsoleLine(String line) async {
+    if (!_enabled) {
+      return;
+    }
     final message = '${DateTime.now().toIso8601String()} $line';
     await _writeLine(message);
   }

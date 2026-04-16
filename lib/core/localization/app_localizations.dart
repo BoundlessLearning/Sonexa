@@ -285,6 +285,23 @@ class AppLocalizations {
   String get clearImageCache => text('清除图片缓存', 'Clear image cache');
   String get cacheCleared => text('缓存已清除', 'Cache cleared');
   String get downloadManager => text('下载管理', 'Downloads');
+  String get diagnostics => text('诊断与反馈', 'Diagnostics');
+  String get diagnosticLogging => text('诊断日志', 'Diagnostic logging');
+  String get diagnosticLoggingDescription => text(
+    '遇到问题时打开，复现后将日志文件路径反馈给开发者。',
+    'Turn this on to capture logs, reproduce the issue, then send the log path to the developer.',
+  );
+  String get exportDiagnosticLog => text('导出日志', 'Export diagnostic log');
+  String get exportDiagnosticLogDescription => text(
+    '将当前诊断日志导出到下载目录，方便反馈问题。',
+    'Export the current diagnostic log to the downloads folder for sharing.',
+  );
+  String get noDiagnosticLogToExport =>
+      text('暂无可导出的诊断日志', 'No diagnostic log available to export');
+  String diagnosticLogExported(String path) =>
+      text('日志已导出到：$path', 'Diagnostic log exported to: $path');
+  String diagnosticLogExportFailed(Object error) =>
+      text('导出日志失败：$error', 'Failed to export diagnostic log: $error');
   String get account => text('账号', 'Account');
   String get logout => text('退出登录', 'Log out');
   String get about => text('关于', 'About');
