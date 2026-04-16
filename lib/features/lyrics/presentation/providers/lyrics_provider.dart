@@ -64,12 +64,12 @@ String _songSummary(Song? song) {
   return 'id=${song.id}, title="${song.title}", artist="${song.artist}"';
 }
 
-/// Creates a dedicated LRCLIB client instead of reusing Subsonic settings.
+/// Creates a dedicated public lyrics client instead of reusing Subsonic settings.
 final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'https://lrclib.net/api',
-      headers: const {'Lrclib-UserAgent': AppBranding.userAgent},
+      baseUrl: 'https://api.lrc.cx/',
+      headers: const {'User-Agent': AppBranding.userAgent},
     ),
   );
   ref.onDispose(() => dio.close(force: true));
@@ -148,7 +148,7 @@ final lyricsProvider = FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((
 /// Controls whether the lyrics panel is visible.
 final showLyricsProvider = StateProvider<bool>((ref) => true);
 
-/// Searches LRCLIB candidates.
+/// Searches public synced-lyrics candidates.
 /// Query format: "songId|artist|title".
 final lyricsSearchProvider = FutureProvider.family<List<Lyrics>, String>((
   ref,

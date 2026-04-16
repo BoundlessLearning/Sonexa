@@ -16,7 +16,8 @@ class LyricsRepository {
 
   static const Duration _cacheTtl = Duration(days: 7);
   static const Duration _navidromeTimeout = Duration(seconds: 3);
-  static const Duration _lrclibTimeout = Duration(seconds: 8);
+  static const Duration _publicLyricsTimeout = Duration(seconds: 8);
+  static const String _publicLyricsSearchPath = '/jsonapi';
 
   final SubsonicApiClient _api;
   final Dio _dio;
@@ -134,17 +135,17 @@ class LyricsRepository {
       fallbackLyrics = navidromeLyrics;
     }
 
-    final lrclibLyrics = await _fetchFromLrclib(
+    final publicLyrics = await _fetchFromPublicJsonApi(
       songId: songId,
       artist: normalizedArtist,
       title: normalizedTitle,
     );
-    if (lrclibLyrics != null) {
+    if (publicLyrics != null) {
       _diag(
-        '[DIAG][LYRICS] getLyrics: using lrclib lyrics, synced=${lrclibLyrics.isSynced}',
+        '[DIAG][LYRICS] getLyrics: using public synced lyrics, synced=${publicLyrics.isSynced}',
       );
-      await _cacheLyrics(lrclibLyrics);
-      return lrclibLyrics;
+      await _cacheLyrics(publicLyrics);
+      return publicLyrics;
     }
 
     if (fallbackLyrics != null) {
@@ -326,55 +327,144 @@ class LyricsRepository {
     }
   }
 
-  Future<Lyrics?> _fetchFromLrclib({
+  Future<Lyrics?> _fetchFromPublicJsonApi({
     required String songId,
     required String artist,
     required String title,
   }) async {
-    try {
-      final response = await _dio
-          .get<Map<String, dynamic>>(
-            'get',
-            queryParameters: {'artist_name': artist, 'track_name': title},
-          )
-          .timeout(_lrclibTimeout);
-
-      final data = response.data;
-      if (data == null) {
-        _diag('[DIAG][LYRICS] lrclib returned null data');
-        return null;
-      }
-
-      final syncedLyrics = (data['syncedLyrics'] as String?)?.trim();
-      if (syncedLyrics != null && syncedLyrics.isNotEmpty) {
-        _diag('[DIAG][LYRICS] lrclib returned synced lyrics');
-        return _buildLyrics(
-          songId: songId,
-          source: LyricsSource.lrclib,
-          rawText: syncedLyrics,
-        );
-      }
-
-      final plainLyrics = (data['plainLyrics'] as String?)?.trim();
-      if (plainLyrics == null || plainLyrics.isEmpty) {
-        _diag('[DIAG][LYRICS] lrclib returned no plain lyrics');
-        return null;
-      }
-
-      _diag('[DIAG][LYRICS] lrclib returned plain lyrics');
-
-      return _buildLyrics(
-        songId: songId,
-        source: LyricsSource.lrclib,
-        rawText: plainLyrics,
-      );
-    } on TimeoutException {
-      _diag('[DIAG][LYRICS] lrclib request timed out');
-      return null;
-    } on DioException {
-      _diag('[DIAG][LYRICS] lrclib request failed');
+    final candidates = await _searchPublicJsonApi(
+      songId: songId,
+      artist: artist,
+      title: title,
+      limit: 5,
+    );
+    if (candidates.isEmpty) {
+      _diag('[DIAG][LYRICS] public jsonapi returned no usable candidates');
       return null;
     }
+
+    final bestCandidate = candidates.first;
+    _diag(
+      '[DIAG][LYRICS] public jsonapi selected candidate, '
+      'synced=${bestCandidate.isSynced}, lines=${bestCandidate.lines.length}',
+    );
+    return bestCandidate;
+  }
+
+  Future<List<Lyrics>> _searchPublicJsonApi({
+    required String songId,
+    required String artist,
+    required String title,
+    int limit = 10,
+  }) async {
+    try {
+      final response = await _dio
+          .get<List<dynamic>>(
+            _publicLyricsSearchPath,
+            queryParameters: {'artist': artist.trim(), 'title': title.trim()},
+          )
+          .timeout(_publicLyricsTimeout);
+
+      final data = response.data;
+      if (data == null || data.isEmpty) {
+        return const [];
+      }
+
+      final rankedResults = <({int rank, Lyrics lyrics})>[];
+      for (final item in data) {
+        if (item is! Map) {
+          continue;
+        }
+        final map = Map<String, dynamic>.from(item);
+        final lyrics = _buildLyricsFromPublicJsonApiEntry(
+          songId: songId,
+          payload: map,
+        );
+        if (lyrics == null) {
+          continue;
+        }
+
+        rankedResults.add((
+          rank: _rankPublicCandidate(
+            payload: map,
+            expectedArtist: artist,
+            expectedTitle: title,
+          ),
+          lyrics: lyrics,
+        ));
+      }
+
+      rankedResults.sort((a, b) => b.rank.compareTo(a.rank));
+      return rankedResults.take(limit).map((entry) => entry.lyrics).toList();
+    } on TimeoutException {
+      _diag('[DIAG][LYRICS] public jsonapi request timed out');
+      return const [];
+    } on DioException {
+      _diag('[DIAG][LYRICS] public jsonapi request failed');
+      return const [];
+    }
+  }
+
+  Lyrics? _buildLyricsFromPublicJsonApiEntry({
+    required String songId,
+    required Map<String, dynamic> payload,
+  }) {
+    final rawText = (payload['lrc'] as String?)?.trim();
+    if (rawText == null || rawText.isEmpty) {
+      return null;
+    }
+
+    final lyrics = _buildLyrics(
+      songId: songId,
+      source: LyricsSource.lrclib,
+      rawText: rawText,
+    );
+    if (lyrics == null || !lyrics.isSynced) {
+      return null;
+    }
+
+    return lyrics;
+  }
+
+  int _rankPublicCandidate({
+    required Map<String, dynamic> payload,
+    required String expectedArtist,
+    required String expectedTitle,
+  }) {
+    final payloadArtist = _normalizedComparable(payload['artist']?.toString());
+    final payloadTitle = _normalizedComparable(payload['title']?.toString());
+    final wantedArtist = _normalizedComparable(expectedArtist);
+    final wantedTitle = _normalizedComparable(expectedTitle);
+
+    var rank = ((payload['score'] as num?)?.toDouble() ?? 0).round();
+
+    if (payloadTitle == wantedTitle) {
+      rank += 2000;
+    } else if (payloadTitle.contains(wantedTitle) ||
+        wantedTitle.contains(payloadTitle)) {
+      rank += 800;
+    }
+
+    if (payloadArtist == wantedArtist) {
+      rank += 3000;
+    } else if (payloadArtist.contains(wantedArtist) ||
+        wantedArtist.contains(payloadArtist)) {
+      rank += 1200;
+    }
+
+    final rawText = (payload['lrc'] as String?)?.trim() ?? '';
+    if (_containsTimestamp(rawText)) {
+      rank += 500;
+    }
+
+    return rank;
+  }
+
+  String _normalizedComparable(String? value) {
+    return (value ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll(RegExp(r'[·・,，./_\-()]'), '');
   }
 
   Lyrics? _buildLyrics({
@@ -516,42 +606,12 @@ class LyricsRepository {
     required String title,
     int limit = 10,
   }) async {
-    try {
-      final response = await _dio.get<List<dynamic>>(
-        'search',
-        queryParameters: {
-          'artist_name': artist.trim(),
-          'track_name': title.trim(),
-        },
-      );
-
-      final data = response.data;
-      if (data == null || data.isEmpty) return [];
-
-      final results = <Lyrics>[];
-      for (final item in data.take(limit)) {
-        final map = item as Map<String, dynamic>;
-        final syncedLyrics = (map['syncedLyrics'] as String?)?.trim();
-        final plainLyrics = (map['plainLyrics'] as String?)?.trim();
-        final rawText =
-            (syncedLyrics?.isNotEmpty == true)
-                ? syncedLyrics!
-                : plainLyrics ?? '';
-        if (rawText.isEmpty) continue;
-
-        final lyrics = _buildLyrics(
-          songId: songId,
-          source: LyricsSource.lrclib,
-          rawText: rawText,
-        );
-        if (lyrics != null) {
-          results.add(lyrics);
-        }
-      }
-      return results;
-    } on DioException {
-      return [];
-    }
+    return _searchPublicJsonApi(
+      songId: songId,
+      artist: artist,
+      title: title,
+      limit: limit,
+    );
   }
 
   Future<void> replaceLyrics(Lyrics lyrics) async {
