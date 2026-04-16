@@ -1,8 +1,13 @@
 ﻿import 'package:dio/dio.dart';
+import 'dart:async';
+
+import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sonexa/core/constants/app_branding.dart';
 import 'package:sonexa/core/database/daos/settings_dao.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/library/presentation/providers/library_provider.dart';
 import 'package:sonexa/features/lyrics/data/repositories/lyrics_repository.dart';
 import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
@@ -29,6 +34,34 @@ class LyricsRequestSnapshot {
 
   @override
   int get hashCode => Object.hash(songId, artist, title);
+
+  @override
+  String toString() {
+    return 'LyricsRequestSnapshot(songId=$songId, artist="$artist", title="$title")';
+  }
+}
+
+void _lyricsDiag(String message) {
+  unawaited(DiagnosticLogger.instance.log(message));
+}
+
+String _mediaItemSummary(MediaItem? item) {
+  if (item == null) {
+    return '<null>';
+  }
+
+  final songId = item.extras?['songId'] as String? ?? item.id;
+  final extrasKeys = item.extras?.keys.join(',') ?? '<none>';
+  return 'id=${item.id}, songId=$songId, title="${item.title}", '
+      'artist="${item.artist ?? ''}", extrasKeys=[$extrasKeys]';
+}
+
+String _songSummary(Song? song) {
+  if (song == null) {
+    return '<null>';
+  }
+
+  return 'id=${song.id}, title="${song.title}", artist="${song.artist}"';
 }
 
 /// Creates a dedicated LRCLIB client instead of reusing Subsonic settings.
@@ -49,8 +82,19 @@ final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
 });
 
 final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
-  final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
+  final currentMediaItemAsync = ref.watch(currentMediaItemProvider);
+  final currentSong = ref.watch(currentSongProvider);
+  final currentMediaItem = currentMediaItemAsync.valueOrNull;
+  _lyricsDiag(
+    '[DIAG][LYRICS][REQUEST] build: '
+    'mediaLoading=${currentMediaItemAsync.isLoading}, '
+    'mediaHasError=${currentMediaItemAsync.hasError}, '
+    'mediaItem=${_mediaItemSummary(currentMediaItem)}, '
+    'currentSong=${_songSummary(currentSong)}',
+  );
+
   if (currentMediaItem == null) {
+    _lyricsDiag('[DIAG][LYRICS][REQUEST] return null: currentMediaItem=null');
     return null;
   }
 
@@ -58,14 +102,20 @@ final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
       (currentMediaItem.extras?['songId'] as String? ?? currentMediaItem.id)
           .trim();
   if (songId.isEmpty) {
+    _lyricsDiag(
+      '[DIAG][LYRICS][REQUEST] return null: songId empty, '
+      'mediaItem=${_mediaItemSummary(currentMediaItem)}',
+    );
     return null;
   }
 
-  return LyricsRequestSnapshot(
+  final request = LyricsRequestSnapshot(
     songId: songId,
     artist: (currentMediaItem.artist ?? '').trim(),
     title: currentMediaItem.title.trim(),
   );
+  _lyricsDiag('[DIAG][LYRICS][REQUEST] return $request');
+  return request;
 });
 
 /// Uses a single media item snapshot to keep song id and metadata in sync.
@@ -73,8 +123,26 @@ final lyricsProvider = FutureProvider.family<Lyrics?, LyricsRequestSnapshot>((
   ref,
   request,
 ) async {
+  _lyricsDiag('[DIAG][LYRICS][FETCH] start: $request');
   final repo = await ref.watch(lyricsRepositoryProvider.future);
-  return repo.getLyrics(request.songId, request.artist, request.title);
+  try {
+    final lyrics = await repo.getLyrics(
+      request.songId,
+      request.artist,
+      request.title,
+    );
+    _lyricsDiag(
+      '[DIAG][LYRICS][FETCH] done: songId=${request.songId}, '
+      'result=${lyrics == null ? '<null>' : 'source=${lyrics.source.name}, synced=${lyrics.isSynced}, lines=${lyrics.lines.length}'}',
+    );
+    return lyrics;
+  } catch (error, stackTrace) {
+    _lyricsDiag(
+      '[DIAG][LYRICS][FETCH] error: songId=${request.songId}, '
+      'error=$error, stackTrace=$stackTrace',
+    );
+    rethrow;
+  }
 });
 
 /// Controls whether the lyrics panel is visible.

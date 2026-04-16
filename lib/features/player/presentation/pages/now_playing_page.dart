@@ -371,30 +371,47 @@ class _ArtworkPage extends StatelessWidget {
   }
 }
 
-class _LyricsPage extends StatelessWidget {
+class _LyricsPage extends ConsumerWidget {
   const _LyricsPage({this.onLongPress});
 
   final VoidCallback? onLongPress;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final showLyrics = ref.watch(showLyricsProvider);
+    final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
+    final currentSong = ref.watch(currentSongProvider);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onLongPress: onLongPress,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(top: 8, bottom: 8),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: const LyricsDisplay(),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        DiagnosticLogger.instance.log(
+          '[DIAG][LYRICS][PAGE] build: showLyrics=$showLyrics, '
+          'constraints=w=${constraints.maxWidth.toStringAsFixed(1)}, '
+          'h=${constraints.maxHeight.toStringAsFixed(1)}, '
+          'currentSong=${currentSong == null ? '<null>' : 'id=${currentSong.id}, title="${currentSong.title}"'}, '
+          'mediaItem=${currentMediaItem == null ? '<null>' : 'id=${currentMediaItem.id}, title="${currentMediaItem.title}"'}',
+        );
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPress: onLongPress,
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.35,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: const LyricsDisplay(),
+            ),
+          ),
+        );
+      },
     );
   }
 }

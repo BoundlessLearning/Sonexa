@@ -1,8 +1,8 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/utils/diagnostic_logger.dart';
@@ -18,57 +18,96 @@ const Duration _lyricsTextAnimationDuration = Duration(milliseconds: 220);
 const Duration _lyricsScrollAnimationDuration = Duration(milliseconds: 280);
 const Duration _lyricsScrubAutoReturnDelay = Duration(seconds: 3);
 
+void _lyricsDiag(String message) {
+  unawaited(DiagnosticLogger.instance.log(message));
+}
+
+String _constraintsSummary(BoxConstraints constraints) {
+  return 'w=${constraints.maxWidth.toStringAsFixed(1)}, '
+      'h=${constraints.maxHeight.toStringAsFixed(1)}, '
+      'bounded=${constraints.hasBoundedWidth}/${constraints.hasBoundedHeight}';
+}
+
+String _mediaItemSummary(MediaItem? item) {
+  if (item == null) {
+    return '<null>';
+  }
+
+  final songId = item.extras?['songId'] as String? ?? item.id;
+  return 'id=${item.id}, songId=$songId, title="${item.title}", '
+      'artist="${item.artist ?? ''}"';
+}
+
 class LyricsDisplay extends ConsumerWidget {
   const LyricsDisplay({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final lyricsRequest = ref.watch(currentLyricsRequestProvider);
-
-    if (lyricsRequest == null) {
-      unawaited(
-        DiagnosticLogger.instance.log(
-          '[DIAG][LYRICS] placeholder: request=null',
-        ),
-      );
-      return _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics);
-    }
-
-    final lyricsAsync = ref.watch(lyricsProvider(lyricsRequest));
-
-    return lyricsAsync.when(
-      loading: () {
-        unawaited(
-          DiagnosticLogger.instance.log(
-            '[DIAG][LYRICS] loading: songId=${lyricsRequest.songId}',
-          ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final lyricsRequest = ref.watch(currentLyricsRequestProvider);
+        final showLyrics = ref.watch(showLyricsProvider);
+        final currentMediaItem =
+            ref.watch(currentMediaItemProvider).valueOrNull;
+        final currentSong = ref.watch(currentSongProvider);
+        _lyricsDiag(
+          '[DIAG][LYRICS][UI] build: '
+          'showLyrics=$showLyrics, constraints=${_constraintsSummary(constraints)}, '
+          'request=$lyricsRequest, mediaItem=${_mediaItemSummary(currentMediaItem)}, '
+          'currentSong=${currentSong == null ? '<null>' : 'id=${currentSong.id}, title="${currentSong.title}"'}',
         );
-        return const Center(child: CircularProgressIndicator());
-      },
-      error: (error, _) {
-        unawaited(
-          DiagnosticLogger.instance.log(
-            '[DIAG][LYRICS] placeholder: error for songId=${lyricsRequest.songId}, '
-            'error=$error',
-          ),
-        );
-        return _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics);
-      },
-      data: (lyrics) {
-        if (lyrics == null || lyrics.lines.isEmpty) {
-          unawaited(
-            DiagnosticLogger.instance.log(
-              '[DIAG][LYRICS] placeholder: empty data for songId=${lyricsRequest.songId}',
-            ),
+
+        if (lyricsRequest == null) {
+          _lyricsDiag(
+            '[DIAG][LYRICS][UI] placeholder: request=null, '
+            'constraints=${_constraintsSummary(constraints)}',
           );
           return _LyricsPlaceholder(
             text: AppLocalizations.of(context).noLyrics,
           );
         }
 
-        return _SyncedLyricsView(
-          key: ValueKey<String>(lyricsRequest.songId),
-          lyrics: lyrics,
+        final lyricsAsync = ref.watch(lyricsProvider(lyricsRequest));
+
+        return lyricsAsync.when(
+          loading: () {
+            _lyricsDiag(
+              '[DIAG][LYRICS][UI] loading: songId=${lyricsRequest.songId}, '
+              'constraints=${_constraintsSummary(constraints)}',
+            );
+            return const Center(child: CircularProgressIndicator());
+          },
+          error: (error, _) {
+            _lyricsDiag(
+              '[DIAG][LYRICS][UI] placeholder: error for songId=${lyricsRequest.songId}, '
+              'error=$error, constraints=${_constraintsSummary(constraints)}',
+            );
+            return _LyricsPlaceholder(
+              text: AppLocalizations.of(context).noLyrics,
+            );
+          },
+          data: (lyrics) {
+            if (lyrics == null || lyrics.lines.isEmpty) {
+              _lyricsDiag(
+                '[DIAG][LYRICS][UI] placeholder: empty data for songId=${lyricsRequest.songId}, '
+                'result=${lyrics == null ? '<null>' : 'lines=${lyrics.lines.length}'}, '
+                'constraints=${_constraintsSummary(constraints)}',
+              );
+              return _LyricsPlaceholder(
+                text: AppLocalizations.of(context).noLyrics,
+              );
+            }
+
+            _lyricsDiag(
+              '[DIAG][LYRICS][UI] data: songId=${lyricsRequest.songId}, '
+              'source=${lyrics.source.name}, synced=${lyrics.isSynced}, '
+              'lines=${lyrics.lines.length}, constraints=${_constraintsSummary(constraints)}',
+            );
+            return _SyncedLyricsView(
+              key: ValueKey<String>(lyricsRequest.songId),
+              lyrics: lyrics,
+            );
+          },
         );
       },
     );
@@ -104,26 +143,31 @@ class _SyncedLyricsView extends ConsumerStatefulWidget {
 }
 
 class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
-  final ItemScrollController _itemScrollController = ItemScrollController();
-  final ItemPositionsListener _itemPositionsListener =
-      ItemPositionsListener.create();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _viewportKey = GlobalKey();
+  final List<GlobalKey> _lineKeys = <GlobalKey>[];
 
   int _lastHighlightedIndex = -1;
   int? _scrubTargetIndex;
   bool _isScrubbingLyrics = false;
   bool _showScrubGuide = false;
   Timer? _scrubReturnTimer;
+  DateTime? _lastViewDiagAt;
+  int? _lastViewDiagIndex;
+  int _scrollRequestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _itemPositionsListener.itemPositions.addListener(_updateScrubTarget);
+    _syncLineKeys(reset: true);
+    _scrollController.addListener(_updateScrubTarget);
   }
 
   @override
   void dispose() {
     _scrubReturnTimer?.cancel();
-    _itemPositionsListener.itemPositions.removeListener(_updateScrubTarget);
+    _scrollController.removeListener(_updateScrubTarget);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -139,20 +183,81 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
       _scrubTargetIndex = null;
       _isScrubbingLyrics = false;
       _showScrubGuide = false;
+      _scrollRequestId++;
+      _syncLineKeys(reset: true);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_itemScrollController.isAttached) {
+        if (_scrollController.hasClients) {
           _diag('[DIAG][LYRICS] jumpTo(0) on song change');
-          _itemScrollController.jumpTo(index: 0);
+          _scrollController.jumpTo(0);
         } else {
-          _diag('[DIAG][LYRICS] jumpTo skipped: controller not attached');
+          _diag('[DIAG][LYRICS] jumpTo skipped: controller has no clients');
         }
       });
+    } else if (oldWidget.lyrics.lines.length != widget.lyrics.lines.length) {
+      _syncLineKeys(reset: true);
+    }
+  }
+
+  void _syncLineKeys({bool reset = false}) {
+    if (reset) {
+      _lineKeys
+        ..clear()
+        ..addAll(
+          List<GlobalKey>.generate(
+            widget.lyrics.lines.length,
+            (_) => GlobalKey(),
+          ),
+        );
+      return;
+    }
+
+    final targetLength = widget.lyrics.lines.length;
+    if (_lineKeys.length == targetLength) {
+      return;
+    }
+
+    if (_lineKeys.length < targetLength) {
+      _lineKeys.addAll(
+        List<GlobalKey>.generate(
+          targetLength - _lineKeys.length,
+          (_) => GlobalKey(),
+        ),
+      );
+    } else {
+      _lineKeys.removeRange(targetLength, _lineKeys.length);
     }
   }
 
   void _diag(String message) {
     unawaited(DiagnosticLogger.instance.log(message));
+  }
+
+  void _diagViewBuild({
+    required BoxConstraints constraints,
+    required int currentIndex,
+    required Duration position,
+    required int offsetMs,
+  }) {
+    final now = DateTime.now();
+    final shouldLog =
+        _lastViewDiagIndex != currentIndex ||
+        _lastViewDiagAt == null ||
+        now.difference(_lastViewDiagAt!) >= const Duration(seconds: 2);
+    if (!shouldLog) {
+      return;
+    }
+
+    _lastViewDiagIndex = currentIndex;
+    _lastViewDiagAt = now;
+    _diag(
+      '[DIAG][LYRICS][VIEW] build: songId=${widget.lyrics.songId}, '
+      'source=${widget.lyrics.source.name}, synced=${widget.lyrics.isSynced}, '
+      'lines=${widget.lyrics.lines.length}, currentIndex=$currentIndex, '
+      'lastHighlighted=$_lastHighlightedIndex, offsetMs=$offsetMs, '
+      'position=$position, hasClients=${_scrollController.hasClients}, '
+      'constraints=${_constraintsSummary(constraints)}',
+    );
   }
 
   void _scheduleScroll(int index) {
@@ -162,7 +267,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
     _diag(
       '[DIAG][LYRICS] scheduleScroll: index=$index, '
-      'last=$_lastHighlightedIndex, attached=${_itemScrollController.isAttached}',
+      'last=$_lastHighlightedIndex, hasClients=${_scrollController.hasClients}',
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -189,31 +294,38 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
   }
 
   int? _findLineAtViewportCenter() {
-    final positions = _itemPositionsListener.itemPositions.value;
-    if (positions.isEmpty) {
+    final viewportContext = _viewportKey.currentContext;
+    final viewportBox = viewportContext?.findRenderObject() as RenderBox?;
+    if (viewportBox == null || !viewportBox.hasSize) {
       return null;
     }
 
-    ItemPosition? best;
+    final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
+    final centerY = viewportTop + viewportBox.size.height / 2;
+    int? bestIndex;
     double bestDistance = double.infinity;
-    for (final position in positions) {
-      if (position.index < 0 || position.index >= widget.lyrics.lines.length) {
+    for (var index = 0; index < _lineKeys.length; index++) {
+      final lineContext = _lineKeys[index].currentContext;
+      final lineBox = lineContext?.findRenderObject() as RenderBox?;
+      if (lineBox == null || !lineBox.hasSize) {
         continue;
       }
 
-      if (position.itemLeadingEdge <= 0.5 && position.itemTrailingEdge >= 0.5) {
-        return position.index;
+      final lineTop = lineBox.localToGlobal(Offset.zero).dy;
+      final lineBottom = lineTop + lineBox.size.height;
+      if (lineTop <= centerY && lineBottom >= centerY) {
+        return index;
       }
 
-      final center = (position.itemLeadingEdge + position.itemTrailingEdge) / 2;
-      final distance = (center - 0.5).abs();
+      final lineCenter = (lineTop + lineBottom) / 2;
+      final distance = (lineCenter - centerY).abs();
       if (distance < bestDistance) {
-        best = position;
+        bestIndex = index;
         bestDistance = distance;
       }
     }
 
-    return best?.index;
+    return bestIndex;
   }
 
   void _updateScrubTarget() {
@@ -309,26 +421,37 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
   }
 
   Future<void> _scrollToLine(int index) async {
-    if (!_itemScrollController.isAttached ||
+    if (!_scrollController.hasClients ||
         index < 0 ||
+        index >= _lineKeys.length ||
         index == _lastHighlightedIndex) {
       _diag(
         '[DIAG][LYRICS] scrollTo skipped: '
         'index=$index, last=$_lastHighlightedIndex, '
-        'attached=${_itemScrollController.isAttached}',
+        'hasClients=${_scrollController.hasClients}, '
+        'lineKeys=${_lineKeys.length}',
       );
       return;
     }
 
+    final lineContext = _lineKeys[index].currentContext;
+    if (lineContext == null) {
+      _diag(
+        '[DIAG][LYRICS] scrollTo skipped: index=$index has no line context',
+      );
+      return;
+    }
+
+    final requestId = ++_scrollRequestId;
     _diag('[DIAG][LYRICS] scrollTo start: index=$index, alignment=0.35');
-    await _itemScrollController.scrollTo(
-      index: index,
+    await Scrollable.ensureVisible(
+      lineContext,
       alignment: 0.35,
       duration: _lyricsScrollAnimationDuration,
       curve: Curves.easeOutCubic,
     );
 
-    if (mounted) {
+    if (mounted && requestId == _scrollRequestId) {
       _lastHighlightedIndex = index;
       _diag('[DIAG][LYRICS] scrollTo done: index=$index');
     }
@@ -336,6 +459,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
   @override
   Widget build(BuildContext context) {
+    _syncLineKeys();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -376,6 +500,12 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        _diagViewBuild(
+          constraints: constraints,
+          currentIndex: currentIndex,
+          position: position,
+          offsetMs: offsetMs,
+        );
         final topPadding = constraints.maxHeight * 0.35;
         final bottomPadding = constraints.maxHeight * 0.65;
 
@@ -388,92 +518,106 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
                   _handleScrollStart();
                 } else if (notification is ScrollEndNotification) {
                   _handleScrollEnd();
+                } else if (notification is ScrollUpdateNotification) {
+                  _updateScrubTarget();
                 }
                 return false;
               },
-              child: ScrollablePositionedList.builder(
-                itemScrollController: _itemScrollController,
-                itemPositionsListener: _itemPositionsListener,
+              child: SingleChildScrollView(
+                key: _viewportKey,
+                controller: _scrollController,
                 physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.only(
-                  top: topPadding,
-                  bottom: bottomPadding,
-                ),
-                itemCount: lines.length,
-                itemBuilder: (context, index) {
-                  final line = lines[index];
-                  final isCurrent = index == currentIndex;
-                  final hasTranslation =
-                      line.translation != null &&
-                      line.translation!.trim().isNotEmpty;
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    top: topPadding,
+                    bottom: bottomPadding,
+                  ),
+                  child: Column(
+                    children: List.generate(lines.length, (index) {
+                      final line = lines[index];
+                      final isCurrent = index == currentIndex;
+                      final hasTranslation =
+                          line.translation != null &&
+                          line.translation!.trim().isNotEmpty;
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _lyricsHorizontalPadding,
-                      vertical: _lyricsVerticalPadding,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: _lyricsMinLineHeight,
-                      ),
-                      child: AnimatedContainer(
-                        duration: _lyricsTextAnimationDuration,
-                        curve: Curves.easeOutCubic,
+                      return Padding(
+                        key: _lineKeys[index],
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
+                          horizontal: _lyricsHorizontalPadding,
+                          vertical: _lyricsVerticalPadding,
                         ),
-                        decoration: BoxDecoration(
-                          color:
-                              isCurrent
-                                  ? colorScheme.primary.withValues(alpha: 0.08)
-                                  : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Center(
-                          child: AnimatedScale(
-                            scale: isCurrent ? 1 : 0.97,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: _lyricsMinLineHeight,
+                          ),
+                          child: AnimatedContainer(
                             duration: _lyricsTextAnimationDuration,
                             curve: Curves.easeOutCubic,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                AnimatedDefaultTextStyle(
-                                  duration: _lyricsTextAnimationDuration,
-                                  curve: Curves.easeOutCubic,
-                                  style:
-                                      isCurrent ? activeStyle : inactiveStyle,
-                                  textAlign: TextAlign.center,
-                                  child: Text(
-                                    line.text.trim().isEmpty ? '♪' : line.text,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (hasTranslation) ...[
-                                  const SizedBox(height: _lyricsTranslationGap),
-                                  AnimatedOpacity(
-                                    duration: _lyricsTextAnimationDuration,
-                                    curve: Curves.easeOutCubic,
-                                    opacity: isCurrent ? 0.95 : 0.72,
-                                    child: Text(
-                                      line.translation!,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  isCurrent
+                                      ? colorScheme.primary.withValues(
+                                        alpha: 0.08,
+                                      )
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Center(
+                              child: AnimatedScale(
+                                scale: isCurrent ? 1 : 0.97,
+                                duration: _lyricsTextAnimationDuration,
+                                curve: Curves.easeOutCubic,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    AnimatedDefaultTextStyle(
+                                      duration: _lyricsTextAnimationDuration,
+                                      curve: Curves.easeOutCubic,
+                                      style:
+                                          isCurrent
+                                              ? activeStyle
+                                              : inactiveStyle,
                                       textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: translationStyle,
+                                      child: Text(
+                                        line.text.trim().isEmpty
+                                            ? '♪'
+                                            : line.text,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    if (hasTranslation) ...[
+                                      const SizedBox(
+                                        height: _lyricsTranslationGap,
+                                      ),
+                                      AnimatedOpacity(
+                                        duration: _lyricsTextAnimationDuration,
+                                        curve: Curves.easeOutCubic,
+                                        opacity: isCurrent ? 0.95 : 0.72,
+                                        child: Text(
+                                          line.translation!,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: translationStyle,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                },
+                      );
+                    }),
+                  ),
+                ),
               ),
             ),
             _LyricsScrubGuide(
