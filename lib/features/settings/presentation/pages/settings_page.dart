@@ -506,7 +506,8 @@ class SettingsPage extends ConsumerWidget {
       }
       await showDialog<void>(
         context: context,
-        builder: (context) => _CacheUsageDialog(initialUsage: usage),
+        builder:
+            (context) => _CacheUsageDialog(initialUsage: usage, l10n: l10n),
       );
     } catch (error) {
       if (!context.mounted) {
@@ -540,9 +541,10 @@ Future<_CacheUsageSnapshot> _loadCacheUsageSnapshot() async {
 }
 
 class _CacheUsageDialog extends StatefulWidget {
-  const _CacheUsageDialog({required this.initialUsage});
+  const _CacheUsageDialog({required this.initialUsage, required this.l10n});
 
   final _CacheUsageSnapshot initialUsage;
+  final AppLocalizations l10n;
 
   @override
   State<_CacheUsageDialog> createState() => _CacheUsageDialogState();
@@ -560,7 +562,7 @@ class _CacheUsageDialogState extends State<_CacheUsageDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+    final l10n = widget.l10n;
 
     return AlertDialog(
       title: Text(l10n.cacheUsage),
@@ -610,7 +612,7 @@ class _CacheUsageDialogState extends State<_CacheUsageDialog> {
         PaintingBinding.instance.imageCache.clear();
         PaintingBinding.instance.imageCache.clearLiveImages();
       },
-      successMessage: AppLocalizations.of(context).imageCacheCleared,
+      successMessage: widget.l10n.imageCacheCleared,
     );
   }
 
@@ -619,7 +621,7 @@ class _CacheUsageDialogState extends State<_CacheUsageDialog> {
       context,
       target: _CacheTarget.song,
       action: () => SongAudioCache.instance.clear(),
-      successMessage: AppLocalizations.of(context).songCacheCleared,
+      successMessage: widget.l10n.songCacheCleared,
     );
   }
 
@@ -629,7 +631,7 @@ class _CacheUsageDialogState extends State<_CacheUsageDialog> {
     required Future<void> Function() action,
     required String successMessage,
   }) async {
-    final l10n = AppLocalizations.of(context);
+    final l10n = widget.l10n;
     final messenger = ScaffoldMessenger.of(context);
 
     if (_clearingTarget != null) {
