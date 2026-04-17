@@ -70,10 +70,7 @@ class DownloadManager {
   Future<void> enqueueDownload(Song song) async {
     _songCache[song.id] = song;
     unawaited(
-      _diag.log(
-        'enqueue request: songId=${song.id}, title="${song.title}"',
-        scope: 'manager',
-      ),
+      _diag.log('enqueue request: songId=${song.id}', scope: 'manager'),
     );
 
     final existingDownload = await _dao.getDownloadBySongId(song.id);
@@ -271,7 +268,7 @@ class DownloadManager {
   }) async {
     unawaited(
       _diag.log(
-        'queue download: taskId=$taskId, songId=${song.id}, title="${song.title}"',
+        'queue download: taskId=$taskId, songId=${song.id}',
         scope: 'task',
       ),
     );
@@ -330,7 +327,7 @@ class DownloadManager {
     );
     unawaited(
       _diag.log(
-        'download start: taskId=$taskId, songId=${song.id}, path=$filePath',
+        'download start: taskId=$taskId, songId=${song.id}',
         scope: 'task',
       ),
     );
@@ -420,7 +417,6 @@ class DownloadManager {
           fields: {
             'taskId': taskId,
             'songId': song.id,
-            'title': song.title,
             'mappedError': errorMessage,
           },
         ),
@@ -498,7 +494,7 @@ class DownloadManager {
       unawaited(
         _diag.log(
           'integrity repair flagged invalid download: '
-          'taskId=${download.id}, songId=${download.songId}, path=${download.localPath}',
+          'taskId=${download.id}, songId=${download.songId}',
           scope: 'repair',
         ),
       );
@@ -654,11 +650,7 @@ class DownloadManager {
             error,
             stackTrace: stackTrace,
             scope: 'artwork',
-            fields: {
-              'songId': song?.id,
-              'coverArtId': coverArtId,
-              'size': size,
-            },
+            fields: {'songId': song?.id, 'size': size},
           ),
         );
         // Artwork prefetch is best-effort; a failed image request should not

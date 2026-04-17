@@ -82,19 +82,13 @@ class QueuePage extends ConsumerWidget {
                   ),
                 ),
                 onDismissed: (_) {
-                  _queueDiag.event(
-                    'remove',
-                    fields: {'index': index, 'title': item.title},
-                  );
+                  _queueDiag.event('remove', fields: {'index': index});
                   audioHandler.removeFromQueue(index);
                 },
                 child: ListTile(
                   key: ValueKey('tile_${item.id}_$index'),
                   onTap: () {
-                    _queueDiag.event(
-                      'tap',
-                      fields: {'index': index, 'title': item.title},
-                    );
+                    _queueDiag.event('tap', fields: {'index': index});
                     audioHandler.skipToQueueItem(index);
                   },
                   leading:

@@ -56,10 +56,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> login(String baseUrl, String username, String password) async {
     state = state.copyWith(isLoading: true, clearError: true);
-    await _authDiag.log(
-      'login start: baseUrl=$baseUrl, username=$username',
-      scope: 'session',
-    );
+    await _authDiag.log('login start', scope: 'session');
 
     try {
       await _ref
@@ -67,35 +64,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
           .login(baseUrl, username, password);
       _ref.invalidate(activeServerProvider);
       state = state.copyWith(isLoading: false, isLoggedIn: true);
-      await _authDiag.log(
-        'login succeeded: baseUrl=$baseUrl, username=$username',
-        scope: 'session',
-      );
+      await _authDiag.log('login succeeded', scope: 'session');
     } on NetworkException catch (error) {
       state = state.copyWith(isLoading: false, error: _mapNetworkError(error));
-      await _authDiag.error(
-        'login network error',
-        error,
-        scope: 'session',
-        fields: {'baseUrl': baseUrl, 'username': username},
-      );
+      await _authDiag.error('login network error', error, scope: 'session');
     } on ServerException catch (error) {
       state = state.copyWith(isLoading: false, error: _mapServerError(error));
       await _authDiag.error(
         'login server error',
         error,
         scope: 'session',
-        fields: {'baseUrl': baseUrl, 'username': username, 'code': error.code},
+        fields: {'code': error.code},
       );
     } on UnauthorizedException {
       state = state.copyWith(
         isLoading: false,
         error: const AppError(AppErrorCode.authenticationFailed),
       );
-      await _authDiag.log(
-        'login unauthorized: baseUrl=$baseUrl, username=$username',
-        scope: 'session',
-      );
+      await _authDiag.log('login unauthorized', scope: 'session');
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -104,12 +90,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           message: error.toString(),
         ),
       );
-      await _authDiag.error(
-        'login unexpected error',
-        error,
-        scope: 'session',
-        fields: {'baseUrl': baseUrl, 'username': username},
-      );
+      await _authDiag.error('login unexpected error', error, scope: 'session');
     }
   }
 

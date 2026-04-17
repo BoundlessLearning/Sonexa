@@ -59,3 +59,7 @@ Thumbs.db
 
 # Test artifacts
 /test_all_api.dart
+
+# Local design/reference assets
+/icon.png
+/startpage.png

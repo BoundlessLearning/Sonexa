@@ -81,5 +81,5 @@ done
 echo ""
 
 echo "=== 构建完成 ==="
-echo "可执行文件: $BUNDLE_DIR/ohmymusic"
-echo "运行: cd $BUNDLE_DIR && ./ohmymusic"
+echo "可执行文件: $BUNDLE_DIR/sonexa"
+echo "运行: cd $BUNDLE_DIR && ./sonexa"
