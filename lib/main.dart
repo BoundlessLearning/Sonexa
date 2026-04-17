@@ -42,20 +42,6 @@ Future<void> main() async {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
       ImageCacheConfig.configure();
-      await SongAudioCache.instance.ensureInitialized();
-      final bootstrapDatabase = AppDatabase();
-      late final bool diagnosticsEnabled;
-      try {
-        diagnosticsEnabled = await DiagnosticLoggingNotifier.loadStoredValue(
-          bootstrapDatabase,
-        );
-      } finally {
-        await bootstrapDatabase.close();
-      }
-      await DiagnosticLogger.instance.init(
-        overwrite: !kReleaseMode,
-        enabled: diagnosticsEnabled,
-      );
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -66,10 +52,6 @@ Future<void> main() async {
           ),
         );
       };
-
-      await DiagnosticLogger.instance.log(
-        '[DIAG] logger initialized: path=${DiagnosticLogger.instance.logFilePath}',
-      );
 
       if (Platform.isLinux || Platform.isWindows) {
         JustAudioMediaKit.mpvLogLevel = MPVLogLevel.error;
@@ -118,9 +100,11 @@ class _BootstrapApp extends StatefulWidget {
 }
 
 class _BootstrapAppState extends State<_BootstrapApp> {
-  static const Duration _minimumSplashDuration = Duration(milliseconds: 1500);
+  static const Duration _minimumSplashDuration = Duration(milliseconds: 900);
 
   late final AppDatabase _database;
+  late final ValueNotifier<double> _splashProgressNotifier;
+  late final Future<void> _runtimePreparationFuture;
   late Future<_BootstrapData> _bootstrapFuture;
   ThemeMode _startupThemeMode = ThemeMode.system;
 
@@ -128,8 +112,16 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   void initState() {
     super.initState();
     _database = AppDatabase();
+    _splashProgressNotifier = ValueNotifier<double>(0);
+    _runtimePreparationFuture = _prepareRuntimeServices();
     unawaited(_loadStartupThemeMode());
     _bootstrapFuture = _bootstrapWithSplash();
+  }
+
+  @override
+  void dispose() {
+    _splashProgressNotifier.dispose();
+    super.dispose();
   }
 
   Future<void> _loadStartupThemeMode() async {
@@ -159,9 +151,9 @@ class _BootstrapAppState extends State<_BootstrapApp> {
   }
 
   Future<_BootstrapData> _bootstrap() async {
-    final themeMode = await ThemeModeNotifier.loadStoredThemeMode(_database);
+    final themeModeFuture = ThemeModeNotifier.loadStoredThemeMode(_database);
 
-    final audioHandler = await AudioService.init(
+    final audioHandlerFuture = AudioService.init(
       builder:
           () => MusicAudioHandler(
             playbackSessionStore: PlaybackSessionStore(SettingsDao(_database)),
@@ -180,6 +172,10 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       },
     );
 
+    final themeMode = await themeModeFuture;
+    final audioHandler = await audioHandlerFuture;
+    await _runtimePreparationFuture;
+
     if (Platform.isWindows) {
       unawaited(WindowsMediaControls.initialize(audioHandler));
     }
@@ -191,57 +187,131 @@ class _BootstrapAppState extends State<_BootstrapApp> {
     );
   }
 
+  Future<void> _prepareRuntimeServices() async {
+    final diagnosticsEnabled = await DiagnosticLoggingNotifier.loadStoredValue(
+      _database,
+    );
+    await DiagnosticLogger.instance.init(
+      overwrite: !kReleaseMode,
+      enabled: diagnosticsEnabled,
+    );
+    await DiagnosticLogger.instance.log(
+      '[DIAG] logger initialized: path=${DiagnosticLogger.instance.logFilePath}',
+    );
+    await SongAudioCache.instance.ensureInitialized();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<_BootstrapData>(
-      future: _bootstrapFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: _startupThemeMode,
-            home: const _BootstrapLoadingScreen(),
-          );
-        }
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: _startupThemeMode,
+      home: FutureBuilder<_BootstrapData>(
+        future: _bootstrapFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return _BootstrapLoadingScreen(
+              progressNotifier: _splashProgressNotifier,
+            );
+          }
 
-        if (snapshot.hasError || !snapshot.hasData) {
-          final error = snapshot.error?.toString() ?? 'Unknown startup error';
-          unawaited(
-            DiagnosticLogger.instance.log('[DIAG] bootstrap failed: $error'),
-          );
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: _BootstrapErrorScreen(
+          if (snapshot.hasError || !snapshot.hasData) {
+            final error = snapshot.error?.toString() ?? 'Unknown startup error';
+            unawaited(
+              DiagnosticLogger.instance.log('[DIAG] bootstrap failed: $error'),
+            );
+            return _BootstrapErrorScreen(
               error: error,
               onRetry: () {
                 setState(() {
                   _bootstrapFuture = _bootstrapWithSplash();
                 });
               },
-            ),
-          );
-        }
+            );
+          }
 
-        final data = snapshot.data!;
-        return ProviderScope(
+          return _BootstrappedApp(
+            data: snapshot.data!,
+            startupThemeMode: _startupThemeMode,
+            splashProgress: _splashProgressNotifier.value,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BootstrappedApp extends StatefulWidget {
+  const _BootstrappedApp({
+    required this.data,
+    required this.startupThemeMode,
+    required this.splashProgress,
+  });
+
+  final _BootstrapData data;
+  final ThemeMode startupThemeMode;
+  final double splashProgress;
+
+  @override
+  State<_BootstrappedApp> createState() => _BootstrappedAppState();
+}
+
+class _BootstrappedAppState extends State<_BootstrappedApp> {
+  bool _showSplashFrame = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _showSplashFrame = false;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ProviderScope(
           overrides: [
-            databaseProvider.overrideWithValue(data.database),
-            audioHandlerProvider.overrideWithValue(data.audioHandler),
+            databaseProvider.overrideWithValue(widget.data.database),
+            audioHandlerProvider.overrideWithValue(widget.data.audioHandler),
             themeModeProvider.overrideWith(
-              (ref) => ThemeModeNotifier(ref, initial: data.themeMode)..load(),
+              (ref) =>
+                  ThemeModeNotifier(ref, initial: widget.data.themeMode)
+                    ..load(),
             ),
           ],
           child: const SonexaApp(),
-        );
-      },
+        ),
+        IgnorePointer(
+          ignoring: true,
+          child: AnimatedOpacity(
+            opacity: _showSplashFrame ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOutCubic,
+            child: _BootstrapSplashFrame(
+              themeMode: widget.startupThemeMode,
+              progress: widget.splashProgress,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _BootstrapLoadingScreen extends StatefulWidget {
-  const _BootstrapLoadingScreen();
+  const _BootstrapLoadingScreen({required this.progressNotifier});
+
+  final ValueNotifier<double> progressNotifier;
 
   @override
   State<_BootstrapLoadingScreen> createState() =>
@@ -255,10 +325,15 @@ class _BootstrapLoadingScreenState extends State<_BootstrapLoadingScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat();
+    _controller =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 1400),
+          )
+          ..addListener(() {
+            widget.progressNotifier.value = _controller.value;
+          })
+          ..repeat();
   }
 
   @override
@@ -272,53 +347,92 @@ class _BootstrapLoadingScreenState extends State<_BootstrapLoadingScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF090B12) : const Color(0xFFDDE7FF),
+      backgroundColor: _bootstrapBackgroundColor(isDark),
       body: SafeArea(
-        child: Center(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final shortestSide = math.min(
-                constraints.maxWidth,
-                constraints.maxHeight,
-              );
-              final splashSize = math.min(shortestSide * 0.94, 640.0);
-
-              return AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  return SizedBox.square(
-                    dimension: splashSize,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CustomPaint(
-                          painter: _SplashWavePainter(
-                            progress: _controller.value,
-                            isDark: isDark,
-                          ),
-                        ),
-                        Image.asset(
-                          'assets/branding/splash_foreground.png',
-                          fit: BoxFit.contain,
-                          gaplessPlayback: true,
-                        ),
-                        _BreathingPlayMark(
-                          progress: _controller.value,
-                          size: splashSize,
-                          isDark: isDark,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return _BootstrapSplashArtwork(
+              progress: _controller.value,
+              isDark: isDark,
+            );
+          },
         ),
       ),
     );
   }
+}
+
+class _BootstrapSplashFrame extends StatelessWidget {
+  const _BootstrapSplashFrame({
+    required this.themeMode,
+    required this.progress,
+  });
+
+  final ThemeMode themeMode;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = themeMode == ThemeMode.dark;
+    return ColoredBox(
+      color: _bootstrapBackgroundColor(isDark),
+      child: SafeArea(
+        child: _BootstrapSplashArtwork(progress: progress, isDark: isDark),
+      ),
+    );
+  }
+}
+
+class _BootstrapSplashArtwork extends StatelessWidget {
+  const _BootstrapSplashArtwork({required this.progress, required this.isDark});
+
+  final double progress;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final shortestSide = math.min(
+            constraints.maxWidth,
+            constraints.maxHeight,
+          );
+          final splashSize = math.min(shortestSide * 0.94, 640.0);
+
+          return SizedBox.square(
+            dimension: splashSize,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(
+                  painter: _SplashWavePainter(
+                    progress: progress,
+                    isDark: isDark,
+                  ),
+                ),
+                Image.asset(
+                  'assets/branding/splash_foreground.png',
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
+                _BreathingPlayMark(
+                  progress: progress,
+                  size: splashSize,
+                  isDark: isDark,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+Color _bootstrapBackgroundColor(bool isDark) {
+  return isDark ? const Color(0xFF090B12) : const Color(0xFFDDE7FF);
 }
 
 class _BreathingPlayMark extends StatelessWidget {
