@@ -32,12 +32,16 @@ class _PlaybackTimelineEvent {
     required this.resolvedMediaItem,
     required this.rawPosition,
     required this.rawBufferedPosition,
+    required this.playbackPositionHint,
+    required this.playbackBufferedHint,
   });
 
   final PlaybackState playbackState;
   final MediaItem? resolvedMediaItem;
   final Duration rawPosition;
   final Duration rawBufferedPosition;
+  final Duration playbackPositionHint;
+  final Duration playbackBufferedHint;
 }
 
 /// Will be overridden in main.dart after AudioService.init completes.
@@ -130,8 +134,18 @@ _PlaybackTimelineSnapshot _stabilizeTimelineSnapshot(
   final songId =
       resolvedMediaItem?.extras?['songId'] as String? ?? resolvedMediaItem?.id;
   final duration = resolvedMediaItem?.duration ?? Duration.zero;
-  final rawPosition = _clampDuration(event.rawPosition, duration);
-  final rawBuffered = _clampDuration(event.rawBufferedPosition, duration);
+  final hintedPosition = _clampDuration(event.playbackPositionHint, duration);
+  final hintedBuffered = _clampDuration(event.playbackBufferedHint, duration);
+  final rawPosition = _clampDuration(
+    event.rawPosition > hintedPosition ? event.rawPosition : hintedPosition,
+    duration,
+  );
+  final rawBuffered = _clampDuration(
+    event.rawBufferedPosition > hintedBuffered
+        ? event.rawBufferedPosition
+        : hintedBuffered,
+    duration,
+  );
   final nowEpochMs = DateTime.now().millisecondsSinceEpoch;
   final lastSeekEpochMs = lastSeekIntentAt?.millisecondsSinceEpoch ?? 0;
   final recentUserSeek = nowEpochMs - lastSeekEpochMs < 2000;
@@ -222,9 +236,9 @@ final currentSongProvider = Provider<Song?>((ref) {
 final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
   final controller = StreamController<MediaItem?>();
-  PlaybackState? latestPlaybackState;
-  MediaItem? latestMediaItem;
-  List<MediaItem> latestQueue = const [];
+  PlaybackState? latestPlaybackState = audioHandler.playbackState.valueOrNull;
+  MediaItem? latestMediaItem = audioHandler.mediaItem.valueOrNull;
+  List<MediaItem> latestQueue = audioHandler.queue.valueOrNull ?? const [];
   MediaItem? lastResolved;
   Timer? clearResolvedTimer;
 
@@ -342,6 +356,8 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
     }),
   ];
 
+  emitResolved();
+
   ref.onDispose(() async {
     cancelPendingClear();
     for (final subscription in subscriptions) {
@@ -358,6 +374,21 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
   });
 });
 
+final resolvedCurrentMediaItemProvider = Provider<MediaItem?>((ref) {
+  final currentMediaItemAsync = ref.watch(currentMediaItemProvider);
+  final currentMediaItem = currentMediaItemAsync.valueOrNull;
+  if (currentMediaItem != null) {
+    return currentMediaItem;
+  }
+
+  final audioHandler = ref.watch(audioHandlerProvider);
+  return _resolveCurrentMediaItem(
+    audioHandler.playbackState.value,
+    audioHandler.mediaItem.valueOrNull,
+    audioHandler.queue.valueOrNull ?? const [],
+  );
+});
+
 /// 当前播放歌曲 ID 的响应式 Provider，用于歌词等需要跟踪切歌的组件。
 final currentSongIdProvider = Provider<String?>((ref) {
   final currentSong = ref.watch(currentSongProvider);
@@ -368,32 +399,16 @@ Stream<_PlaybackTimelineSnapshot> _playbackTimelineStream(Ref ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
   final lastSeekIntentAt = ref.watch(playerSeekIntentProvider);
 
-  return Rx.combineLatest5<
-        Duration,
-        Duration,
-        PlaybackState,
-        MediaItem?,
-        List<MediaItem>,
-        _PlaybackTimelineEvent
-      >(
-        audioHandler.positionStream,
-        audioHandler.bufferedPositionStream,
-        audioHandler.playbackState,
-        audioHandler.mediaItem,
-        audioHandler.queue,
-        (rawPosition, rawBufferedPosition, playbackState, mediaItem, queue) {
-          final resolvedMediaItem = _resolveCurrentMediaItem(
-            playbackState,
-            mediaItem,
-            queue,
-          );
-          return _PlaybackTimelineEvent(
-            playbackState: playbackState,
-            resolvedMediaItem: resolvedMediaItem,
-            rawPosition: rawPosition,
-            rawBufferedPosition: rawBufferedPosition,
-          );
-        },
+  return audioHandler.playbackSnapshotStream
+      .map(
+        (snapshot) => _PlaybackTimelineEvent(
+          playbackState: snapshot.playbackState,
+          resolvedMediaItem: snapshot.currentItem,
+          rawPosition: snapshot.position,
+          rawBufferedPosition: snapshot.bufferedPosition,
+          playbackPositionHint: snapshot.playbackState.updatePosition,
+          playbackBufferedHint: snapshot.playbackState.bufferedPosition,
+        ),
       )
       .scan<_PlaybackTimelineSnapshot>(
         (previous, event, _) =>
@@ -419,9 +434,39 @@ final playbackTimelineProvider = StreamProvider<_PlaybackTimelineSnapshot>(
   _playbackTimelineStream,
 );
 
+final playbackTimelineSnapshotProvider = Provider<_PlaybackTimelineSnapshot?>((
+  ref,
+) {
+  final timelineAsync = ref.watch(playbackTimelineProvider);
+  final timeline = timelineAsync.valueOrNull;
+  if (timeline != null) {
+    return timeline;
+  }
+
+  final audioHandler = ref.watch(audioHandlerProvider);
+  final playbackState = audioHandler.playbackState.value;
+  final resolvedMediaItem = _resolveCurrentMediaItem(
+    playbackState,
+    audioHandler.mediaItem.valueOrNull,
+    audioHandler.queue.valueOrNull ?? const [],
+  );
+  return _PlaybackTimelineSnapshot(
+    songId:
+        resolvedMediaItem?.extras?['songId'] as String? ??
+        resolvedMediaItem?.id,
+    position: playbackState.updatePosition,
+    bufferedPosition: playbackState.bufferedPosition,
+    duration: resolvedMediaItem?.duration ?? Duration.zero,
+  );
+});
+
 /// Stream of the current playback position.
 final positionProvider = StreamProvider<Duration>((ref) {
   return _playbackTimelineStream(ref).map((snapshot) => snapshot.position);
+});
+
+final resolvedPositionProvider = Provider<Duration>((ref) {
+  return ref.watch(playbackTimelineSnapshotProvider)?.position ?? Duration.zero;
 });
 
 /// Stream of the buffered position.
@@ -431,8 +476,22 @@ final bufferedPositionProvider = StreamProvider<Duration>((ref) {
   ).map((snapshot) => snapshot.bufferedPosition);
 });
 
+final resolvedBufferedPositionProvider = Provider<Duration>((ref) {
+  return ref.watch(playbackTimelineSnapshotProvider)?.bufferedPosition ??
+      Duration.zero;
+});
+
 /// Stream of the total duration of the current track.
 final durationProvider = StreamProvider<Duration?>((ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
   return audioHandler.durationStream;
+});
+
+final resolvedDurationProvider = Provider<Duration?>((ref) {
+  final durationAsync = ref.watch(durationProvider);
+  final duration = durationAsync.valueOrNull;
+  if (duration != null && duration > Duration.zero) {
+    return duration;
+  }
+  return ref.watch(playbackTimelineSnapshotProvider)?.duration;
 });

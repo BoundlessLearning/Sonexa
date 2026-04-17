@@ -193,7 +193,7 @@ class _NowPlayingPageState extends ConsumerState<NowPlayingPage> {
     final audioHandler = ref.watch(audioHandlerProvider);
     final favorites = ref.watch(favoritesNotifierProvider);
     final currentSong = ref.watch(currentSongProvider);
-    final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
+    final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
     final songId = currentSong?.id;
     final isFavorite = songId != null && favorites.contains(songId);
     final coverUrl = currentMediaItem?.artUri?.toString();
@@ -330,7 +330,7 @@ class _LyricsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final showLyrics = ref.watch(showLyricsProvider);
-    final currentMediaItem = ref.watch(currentMediaItemProvider).valueOrNull;
+    final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
     final currentSong = ref.watch(currentSongProvider);
 
     return LayoutBuilder(
@@ -456,16 +456,16 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final positionAsync = ref.watch(positionProvider);
-    final bufferedPositionAsync = ref.watch(bufferedPositionProvider);
-    final durationAsync = ref.watch(durationProvider);
+    ref.watch(positionProvider);
+    ref.watch(bufferedPositionProvider);
+    ref.watch(durationProvider);
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    final position = positionAsync.valueOrNull ?? Duration.zero;
-    final bufferedPosition = bufferedPositionAsync.valueOrNull ?? Duration.zero;
+    final position = ref.watch(resolvedPositionProvider);
+    final bufferedPosition = ref.watch(resolvedBufferedPositionProvider);
     final duration =
-        durationAsync.valueOrNull ??
+        ref.watch(resolvedDurationProvider) ??
         widget.mediaItem?.duration ??
         Duration.zero;
 

@@ -36,6 +36,8 @@ class MusicAudioHandler extends BaseAudioHandler
   bool _skipInProgress = false;
   Timer? _persistSessionTimer;
   bool _isRestoringSession = false;
+  Duration? _restoredPositionHint;
+  String? _restoredPositionSongId;
 
   // ── [Round8-F3] 自维护 currentIndex ──
   // _player.currentIndex 依赖 just_audio 的异步 stream pipeline
@@ -66,8 +68,16 @@ class MusicAudioHandler extends BaseAudioHandler
   Duration? _guardedSeekResumePosition;
   DateTime? _seekGuardUntil;
 
-  Stream<Duration> get positionStream => _player.positionStream;
-  Stream<Duration> get bufferedPositionStream => _player.bufferedPositionStream;
+  Stream<Duration> get positionStream =>
+      Rx.merge<Duration>([
+        _player.positionStream,
+        playbackState.map((state) => state.updatePosition),
+      ]).distinct();
+  Stream<Duration> get bufferedPositionStream =>
+      Rx.merge<Duration>([
+        _player.bufferedPositionStream,
+        playbackState.map((state) => state.bufferedPosition),
+      ]).distinct();
   Stream<Duration?> get durationStream => _player.durationStream;
   Stream<int?> get currentIndexStream =>
       playbackState.map((state) => state.queueIndex).distinct();
@@ -256,6 +266,20 @@ class MusicAudioHandler extends BaseAudioHandler
     _guardedSeekItem = null;
     _guardedSeekResumePosition = null;
     _seekGuardUntil = null;
+  }
+
+  void _armRestoredPositionHint(MediaItem item, Duration position) {
+    if (position <= Duration.zero) {
+      _clearRestoredPositionHint('zero-position');
+      return;
+    }
+    _restoredPositionHint = position;
+    _restoredPositionSongId = _songIdOf(item);
+  }
+
+  void _clearRestoredPositionHint(String reason) {
+    _restoredPositionHint = null;
+    _restoredPositionSongId = null;
   }
 
   Future<void> _init() async {
@@ -578,6 +602,7 @@ class MusicAudioHandler extends BaseAudioHandler
       );
       _currentIndex = safeIndex;
       mediaItem.add(items[safeIndex]);
+      _armRestoredPositionHint(items[safeIndex], snapshot.position);
       playbackState.add(_transformEvent(_player.playbackEvent));
 
       if (snapshot.position > Duration.zero) {
@@ -585,10 +610,12 @@ class MusicAudioHandler extends BaseAudioHandler
           _player.seek(snapshot.position),
           'restoreSession.seek',
         );
+        playbackState.add(_transformEvent(_player.playbackEvent));
       }
 
       _pauseRequested = true;
       await _player.pause();
+      playbackState.add(_transformEvent(_player.playbackEvent));
       _diag('[DIAG] restore session: completed');
     } catch (error, stackTrace) {
       _diag(
@@ -603,6 +630,28 @@ class MusicAudioHandler extends BaseAudioHandler
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {
+    final currentItem =
+        (_currentIndex >= 0 && _currentIndex < queue.value.length)
+            ? queue.value[_currentIndex]
+            : mediaItem.valueOrNull;
+    final currentSongId = currentItem == null ? null : _songIdOf(currentItem);
+    var effectivePosition = _player.position;
+    var effectiveBufferedPosition = _player.bufferedPosition;
+    final restoredHint = _restoredPositionHint;
+
+    if (restoredHint != null && _restoredPositionSongId != null) {
+      if (currentSongId != null && currentSongId != _restoredPositionSongId) {
+        _clearRestoredPositionHint('song-changed');
+      } else if (effectivePosition >= restoredHint) {
+        _clearRestoredPositionHint('player-caught-up');
+      } else {
+        effectivePosition = restoredHint;
+        if (effectiveBufferedPosition < effectivePosition) {
+          effectiveBufferedPosition = effectivePosition;
+        }
+      }
+    }
+
     return PlaybackState(
       controls: [
         MediaControl.skipToPrevious,
@@ -623,8 +672,8 @@ class MusicAudioHandler extends BaseAudioHandler
         ProcessingState.completed => AudioProcessingState.completed,
       },
       playing: _player.playing,
-      updatePosition: _player.position,
-      bufferedPosition: _player.bufferedPosition,
+      updatePosition: effectivePosition,
+      bufferedPosition: effectiveBufferedPosition,
       speed: _player.speed,
       queueIndex: _currentIndex,
     );
@@ -849,6 +898,7 @@ class MusicAudioHandler extends BaseAudioHandler
       'initialIndex=$initialIndex, '
       'playMode=${_playbackModeController.mode}',
     );
+    _clearRestoredPositionHint('loadAndPlay');
     _originalQueue = [];
     _resetShuffleHistory('loadAndPlay');
 
@@ -1007,6 +1057,7 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> seek(Duration position) async {
+    _clearRestoredPositionHint('seek');
     _pauseRequested = false;
     _playbackRecoveryPolicy.reset(
       lastBufferedPosition: _player.bufferedPosition,
@@ -1026,6 +1077,7 @@ class MusicAudioHandler extends BaseAudioHandler
     );
     try {
       await _withTimeout(_player.seek(position), 'seek');
+      playbackState.add(_transformEvent(_player.playbackEvent));
       Future<void>.delayed(_seekGuardWindow, () {
         if (_seekGuardActive && _guardedSeekIndex == savedIndex) {
           _clearSeekGuard('seek-window-expired');
@@ -1599,6 +1651,7 @@ class MusicAudioHandler extends BaseAudioHandler
     }
 
     if (currentQueue.isEmpty) {
+      _clearRestoredPositionHint('queue-empty');
       mediaItem.add(null);
       await _playbackSessionStore.clear();
       return;

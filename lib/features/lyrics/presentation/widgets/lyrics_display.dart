@@ -47,8 +47,7 @@ class LyricsDisplay extends ConsumerWidget {
       builder: (context, constraints) {
         final lyricsRequest = ref.watch(currentLyricsRequestProvider);
         final showLyrics = ref.watch(showLyricsProvider);
-        final currentMediaItem =
-            ref.watch(currentMediaItemProvider).valueOrNull;
+        final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
         final currentSong = ref.watch(currentSongProvider);
         _lyricsDiag(
           '[DIAG][LYRICS][UI] build: '
@@ -381,7 +380,7 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
         _scrubTargetIndex = null;
       });
 
-      final position = ref.read(positionProvider).valueOrNull ?? Duration.zero;
+      final position = ref.read(resolvedPositionProvider);
       final offsetMs = ref.read(currentLyricsOffsetProvider);
       final effectivePositionMs =
           (position.inMilliseconds + offsetMs).clamp(0, 1 << 31).toInt();
@@ -464,9 +463,9 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     final lines = widget.lyrics.lines;
-    final positionAsync = ref.watch(positionProvider);
+    ref.watch(positionProvider);
     final offsetMs = ref.watch(currentLyricsOffsetProvider);
-    final position = positionAsync.valueOrNull ?? Duration.zero;
+    final position = ref.watch(resolvedPositionProvider);
     final effectivePositionMs =
         (position.inMilliseconds + offsetMs).clamp(0, 1 << 31).toInt();
     final currentIndex =

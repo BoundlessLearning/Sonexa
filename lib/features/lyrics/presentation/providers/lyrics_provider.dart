@@ -84,7 +84,7 @@ final lyricsRepositoryProvider = FutureProvider<LyricsRepository>((ref) async {
 final currentLyricsRequestProvider = Provider<LyricsRequestSnapshot?>((ref) {
   final currentMediaItemAsync = ref.watch(currentMediaItemProvider);
   final currentSong = ref.watch(currentSongProvider);
-  final currentMediaItem = currentMediaItemAsync.valueOrNull;
+  final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
   _lyricsDiag(
     '[DIAG][LYRICS][REQUEST] build: '
     'mediaLoading=${currentMediaItemAsync.isLoading}, '

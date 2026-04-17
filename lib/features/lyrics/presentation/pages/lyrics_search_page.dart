@@ -649,7 +649,7 @@ class _LyricsCandidatePreviewState
       return 0;
     }
 
-    final position = ref.read(positionProvider).valueOrNull ?? Duration.zero;
+    final position = ref.read(resolvedPositionProvider);
     final offsetMs =
         ref.read(lyricsOffsetProvider(widget.songId)).valueOrNull ?? 0;
     final effectivePositionMs =
@@ -694,7 +694,7 @@ class _LyricsCandidatePreviewState
     _syncLineKeys();
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final position = ref.watch(positionProvider).valueOrNull ?? Duration.zero;
+    final position = ref.watch(resolvedPositionProvider);
     final offsetMs =
         ref.watch(lyricsOffsetProvider(widget.songId)).valueOrNull ?? 0;
     final lines = widget.lyrics.lines;
