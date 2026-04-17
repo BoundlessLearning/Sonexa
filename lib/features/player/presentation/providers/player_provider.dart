@@ -399,16 +399,32 @@ Stream<_PlaybackTimelineSnapshot> _playbackTimelineStream(Ref ref) {
   final audioHandler = ref.watch(audioHandlerProvider);
   final lastSeekIntentAt = ref.watch(playerSeekIntentProvider);
 
-  return audioHandler.playbackSnapshotStream
-      .map(
-        (snapshot) => _PlaybackTimelineEvent(
-          playbackState: snapshot.playbackState,
-          resolvedMediaItem: snapshot.currentItem,
-          rawPosition: snapshot.position,
-          rawBufferedPosition: snapshot.bufferedPosition,
-          playbackPositionHint: snapshot.playbackState.updatePosition,
-          playbackBufferedHint: snapshot.playbackState.bufferedPosition,
-        ),
+  return Rx.combineLatest5<
+        PlaybackState,
+        MediaItem?,
+        List<MediaItem>,
+        Duration,
+        Duration,
+        _PlaybackTimelineEvent
+      >(
+        audioHandler.playbackState,
+        audioHandler.mediaItem,
+        audioHandler.queue,
+        audioHandler.positionStream,
+        audioHandler.bufferedPositionStream,
+        (playbackState, mediaItem, queue, rawPosition, rawBufferedPosition) =>
+            _PlaybackTimelineEvent(
+              playbackState: playbackState,
+              resolvedMediaItem: _resolveCurrentMediaItem(
+                playbackState,
+                mediaItem,
+                queue,
+              ),
+              rawPosition: rawPosition,
+              rawBufferedPosition: rawBufferedPosition,
+              playbackPositionHint: playbackState.updatePosition,
+              playbackBufferedHint: playbackState.bufferedPosition,
+            ),
       )
       .scan<_PlaybackTimelineSnapshot>(
         (previous, event, _) =>
