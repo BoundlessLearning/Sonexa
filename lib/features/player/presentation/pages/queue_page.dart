@@ -8,6 +8,8 @@ import 'package:sonexa/core/utils/formatters.dart';
 import 'package:sonexa/core/widgets/app_image.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
+final _queueDiag = DiagnosticLogger.instance.module('queue');
+
 class QueuePage extends ConsumerWidget {
   const QueuePage({super.key});
 
@@ -56,8 +58,9 @@ class QueuePage extends ConsumerWidget {
                 newIndex -= 1;
               }
 
-              DiagnosticLogger.instance.log(
-                '[OP] queue_reorder: oldIndex=$oldIndex, newIndex=$newIndex',
+              _queueDiag.event(
+                'reorder',
+                fields: {'oldIndex': oldIndex, 'newIndex': newIndex},
               );
               audioHandler.moveQueueItem(oldIndex, newIndex);
             },
@@ -79,16 +82,18 @@ class QueuePage extends ConsumerWidget {
                   ),
                 ),
                 onDismissed: (_) {
-                  DiagnosticLogger.instance.log(
-                    '[OP] queue_remove: index=$index, title=${item.title}',
+                  _queueDiag.event(
+                    'remove',
+                    fields: {'index': index, 'title': item.title},
                   );
                   audioHandler.removeFromQueue(index);
                 },
                 child: ListTile(
                   key: ValueKey('tile_${item.id}_$index'),
                   onTap: () {
-                    DiagnosticLogger.instance.log(
-                      '[OP] queue_tap: index=$index, title=${item.title}',
+                    _queueDiag.event(
+                      'tap',
+                      fields: {'index': index, 'title': item.title},
                     );
                     audioHandler.skipToQueueItem(index);
                   },

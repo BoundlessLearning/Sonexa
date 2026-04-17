@@ -14,6 +14,8 @@ import 'package:sonexa/features/library/presentation/widgets/song_list_tile.dart
 import 'package:sonexa/features/player/presentation/providers/favorites_provider.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
+final _albumDiag = DiagnosticLogger.instance.module('library');
+
 /// 专辑详情页 — 展示专辑封面、元数据、歌曲列表
 class AlbumDetailPage extends ConsumerStatefulWidget {
   const AlbumDetailPage({super.key, required this.albumId});
@@ -188,8 +190,13 @@ class _AlbumDetailPageState extends ConsumerState<AlbumDetailPage> {
   void _playFromIndex(List<Song> songs, int index) {
     final api = ref.read(subsonicApiClientProvider).requireValue;
     final audioHandler = ref.read(audioHandlerProvider);
-    DiagnosticLogger.instance.log(
-      '[OP] album_detail_play: startIndex=$index, totalSongs=${songs.length}',
+    _albumDiag.event(
+      'album_detail_play',
+      fields: {
+        'albumId': widget.albumId,
+        'startIndex': index,
+        'totalSongs': songs.length,
+      },
     );
 
     final items =

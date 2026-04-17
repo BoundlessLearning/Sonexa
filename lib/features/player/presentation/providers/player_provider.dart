@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'package:sonexa/core/audio/audio_handler.dart';
-import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/library/domain/entities/song.dart';
 import 'package:sonexa/features/player/domain/entities/player_state.dart' as ps;
 
@@ -185,17 +184,6 @@ _PlaybackTimelineSnapshot _stabilizeTimelineSnapshot(
     duration,
   );
 
-  if (shouldHold) {
-    unawaited(
-      DiagnosticLogger.instance.log(
-        '[DIAG][PLAYER] hold position during buffering: '
-        'songId=${songId ?? '<null>'}, previous=${previous.position}, '
-        'rawPosition=$rawPosition, rawBuffered=$rawBuffered, '
-        'recentUserSeek=$recentUserSeek, processingState=${playbackState.processingState}',
-      ),
-    );
-  }
-
   return _PlaybackTimelineSnapshot(
     songId: songId,
     position: _clampDuration(stabilizedPosition, duration),
@@ -271,17 +259,7 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
         return;
       }
 
-      final previousSongId =
-          lastResolved?.extras?['songId'] as String? ??
-          lastResolved?.id ??
-          '<null>';
       lastResolved = null;
-      unawaited(
-        DiagnosticLogger.instance.log(
-          '[DIAG][PLAYER] currentMediaItemProvider cleared after debounce: '
-          'previousSongId=$previousSongId',
-        ),
-      );
       controller.add(null);
     });
   }
@@ -302,10 +280,6 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
       cancelPendingClear();
       lastResolved = resolved;
     } else {
-      final previousSongId =
-          lastResolved?.extras?['songId'] as String? ??
-          lastResolved?.id ??
-          '<null>';
       final queueIndex = playbackState.queueIndex;
       final processingState = playbackState.processingState;
       final shouldDebounceClear =
@@ -315,24 +289,10 @@ final currentMediaItemProvider = StreamProvider<MediaItem?>((ref) {
           processingState == AudioProcessingState.idle &&
           !playbackState.playing;
       if (shouldDebounceClear) {
-        unawaited(
-          DiagnosticLogger.instance.log(
-            '[DIAG][PLAYER] currentMediaItemProvider debounce clear: '
-            'previousSongId=$previousSongId, queueIndex=$queueIndex, '
-            'queueLen=${latestQueue.length}, processingState=$processingState',
-          ),
-        );
         scheduleClearIfStillEmpty();
         controller.add(lastResolved);
       } else {
         cancelPendingClear();
-        unawaited(
-          DiagnosticLogger.instance.log(
-            '[DIAG][PLAYER] currentMediaItemProvider unresolved without hold: '
-            'previousSongId=$previousSongId, queueIndex=$queueIndex, '
-            'queueLen=${latestQueue.length}, processingState=$processingState',
-          ),
-        );
         controller.add(null);
       }
       return;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:sonexa/core/localization/app_localizations.dart';
 import 'package:sonexa/core/theme/page_transitions.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/features/auth/presentation/pages/login_page.dart';
 import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sonexa/features/download/presentation/pages/downloads_page.dart';
@@ -24,6 +27,8 @@ import 'package:sonexa/features/player/presentation/widgets/mini_player.dart';
 import 'package:sonexa/features/search/presentation/pages/search_page.dart';
 import 'package:sonexa/features/settings/presentation/pages/settings_page.dart';
 
+final _routerDiag = DiagnosticLogger.instance.module('router');
+
 final routerProvider = Provider<GoRouter>((ref) {
   // watch activeServerProvider 以确保登录/登出时路由自动刷新
   final activeServer = ref.watch(activeServerProvider);
@@ -41,10 +46,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       final hasActiveServer = activeServer.asData?.value != null;
 
       if (!hasActiveServer && !isLoginRoute) {
+        unawaited(
+          _routerDiag.log(
+            'redirect to login: location=${state.matchedLocation}',
+            scope: 'auth',
+          ),
+        );
         return '/login';
       }
 
       if (hasActiveServer && isLoginRoute) {
+        unawaited(
+          _routerDiag.log(
+            'redirect to home: login route while authenticated',
+            scope: 'auth',
+          ),
+        );
         return '/';
       }
 
@@ -300,12 +317,14 @@ class _AppShellState extends State<AppShell> {
     if (_lastBackPressedAt == null ||
         now.difference(_lastBackPressedAt!) > const Duration(seconds: 2)) {
       _lastBackPressedAt = now;
+      unawaited(_routerDiag.log('exit confirmation requested', scope: 'shell'));
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(l10n.pressBackAgainToExit)));
       return;
     }
 
+    unawaited(_routerDiag.log('exit app confirmed', scope: 'shell'));
     SystemNavigator.pop();
   }
 

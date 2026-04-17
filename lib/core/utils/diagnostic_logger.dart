@@ -101,6 +101,34 @@ class DiagnosticLogger {
     await _writeLine('${DateTime.now().toIso8601String()} $message');
   }
 
+  Future<void> logDiagnostic(String module, String message, {String? scope}) {
+    return log(_formatDiagnosticMessage(module, message, scope: scope));
+  }
+
+  Future<void> logDiagnosticError(
+    String module,
+    String action,
+    Object error, {
+    StackTrace? stackTrace,
+    String? scope,
+    Map<String, Object?> fields = const {},
+  }) async {
+    final extras = <String, Object?>{
+      if (fields.isNotEmpty) ...fields,
+      'error': error.toString(),
+    };
+
+    await logDiagnostic(
+      module,
+      '$action failed${extras.isEmpty ? '' : ': ${_formatFields(extras)}'}',
+      scope: scope,
+    );
+
+    if (stackTrace != null) {
+      await logDiagnostic(module, 'stackTrace=$stackTrace', scope: scope);
+    }
+  }
+
   Future<void> logEvent(
     String category,
     String action, {
@@ -143,6 +171,70 @@ class DiagnosticLogger {
     });
 
     await _pendingWrite;
+  }
+
+  String _formatDiagnosticMessage(
+    String module,
+    String message, {
+    String? scope,
+  }) {
+    final normalizedModule = _normalizeTag(module);
+    final normalizedScope =
+        scope == null || scope.trim().isEmpty
+            ? ''
+            : '[${_normalizeTag(scope)}]';
+    return '[DIAG][$normalizedModule]$normalizedScope $message';
+  }
+
+  String _normalizeTag(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), '_').toUpperCase();
+  }
+
+  String _formatFields(Map<String, Object?> fields) {
+    return fields.entries
+        .map(
+          (entry) =>
+              '${entry.key}=${_eventFormatter._toJsonValue(entry.value)}',
+        )
+        .join(', ');
+  }
+}
+
+extension DiagnosticLoggerModuleExtension on DiagnosticLogger {
+  DiagnosticModuleLogger module(String module) {
+    return DiagnosticModuleLogger._(this, module);
+  }
+}
+
+class DiagnosticModuleLogger {
+  const DiagnosticModuleLogger._(this._logger, this._module);
+
+  final DiagnosticLogger _logger;
+  final String _module;
+
+  Future<void> log(String message, {String? scope}) {
+    return _logger.logDiagnostic(_module, message, scope: scope);
+  }
+
+  Future<void> error(
+    String action,
+    Object error, {
+    StackTrace? stackTrace,
+    String? scope,
+    Map<String, Object?> fields = const {},
+  }) {
+    return _logger.logDiagnosticError(
+      _module,
+      action,
+      error,
+      stackTrace: stackTrace,
+      scope: scope,
+      fields: fields,
+    );
+  }
+
+  Future<void> event(String action, {Map<String, Object?> fields = const {}}) {
+    return _logger.logEvent(_module.toLowerCase(), action, fields: fields);
   }
 }
 

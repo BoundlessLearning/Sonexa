@@ -7,14 +7,29 @@ import 'package:sonexa/core/utils/diagnostic_logger.dart';
 class AudioDiagnostics {
   const AudioDiagnostics();
 
+  static final DiagnosticModuleLogger _logger = DiagnosticLogger.instance
+      .module('audio');
+
   void log(String message, {Object? error, StackTrace? stackTrace}) {
-    unawaited(DiagnosticLogger.instance.log(message));
-    if (error != null) {
-      unawaited(DiagnosticLogger.instance.log('[DIAG] error=$error'));
+    if (message.startsWith('[DIAG][')) {
+      unawaited(DiagnosticLogger.instance.log(message));
+    } else {
+      unawaited(_logger.log(message));
+    }
+    if (error != null || stackTrace != null) {
+      unawaited(
+        _logger.error(
+          'audio diagnostics',
+          error ?? 'unknown error',
+          stackTrace: stackTrace,
+        ),
+      );
     }
     if (stackTrace != null) {
-      debugPrintStack(label: '[DIAG] stackTrace', stackTrace: stackTrace);
-      unawaited(DiagnosticLogger.instance.log('[DIAG] stackTrace=$stackTrace'));
+      debugPrintStack(
+        label: '[DIAG][AUDIO] stackTrace',
+        stackTrace: stackTrace,
+      );
     }
   }
 

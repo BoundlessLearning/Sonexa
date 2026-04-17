@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import 'package:sonexa/core/database/app_database.dart';
 import 'package:sonexa/core/error/app_error.dart';
 import 'package:sonexa/core/network/subsonic_api_client.dart';
+import 'package:sonexa/core/utils/diagnostic_logger.dart';
 import 'package:sonexa/core/utils/image_cache_key.dart';
 import 'package:sonexa/features/library/data/models/subsonic_response_models.dart';
 import 'package:sonexa/features/download/data/download_dao.dart';
@@ -40,6 +41,9 @@ class DownloadManager {
       AppErrorCode.downloadCancelled.storageValue;
   static final String _downloadFileMissingOrInvalidError =
       AppErrorCode.downloadFileMissingOrInvalid.storageValue;
+  static final DiagnosticModuleLogger _diag = DiagnosticLogger.instance.module(
+    'download',
+  );
 
   final SubsonicApiClient _apiClient;
   final AppDatabase _db;
@@ -65,6 +69,12 @@ class DownloadManager {
 
   Future<void> enqueueDownload(Song song) async {
     _songCache[song.id] = song;
+    unawaited(
+      _diag.log(
+        'enqueue request: songId=${song.id}, title="${song.title}"',
+        scope: 'manager',
+      ),
+    );
 
     final existingDownload = await _dao.getDownloadBySongId(song.id);
     if (existingDownload != null) {
@@ -107,6 +117,7 @@ class DownloadManager {
   Future<void> resume(String taskId) => retryDownload(taskId);
 
   Future<void> deleteAll() async {
+    unawaited(_diag.log('delete all downloads requested', scope: 'manager'));
     final queuedTaskIds = _pendingQueue.map((task) => task.taskId);
     final activeTaskIds = _activeTokens.keys;
     final persistedTaskIds = _latestDownloads.map((task) => task.id);
@@ -122,6 +133,7 @@ class DownloadManager {
   }
 
   void cancelDownload(String taskId) {
+    unawaited(_diag.log('cancel request: taskId=$taskId', scope: 'manager'));
     final queuedTask = _pendingQueue.firstWhereOrNull(
       (task) => task.taskId == taskId,
     );
@@ -170,6 +182,7 @@ class DownloadManager {
   }
 
   Future<void> deleteDownload(String taskId) async {
+    unawaited(_diag.log('delete request: taskId=$taskId', scope: 'manager'));
     final queuedTask = _pendingQueue.firstWhereOrNull(
       (task) => task.taskId == taskId,
     );
@@ -211,6 +224,7 @@ class DownloadManager {
   }
 
   Future<void> retryDownload(String taskId) async {
+    unawaited(_diag.log('retry request: taskId=$taskId', scope: 'manager'));
     if (_activeTokens.containsKey(taskId) ||
         _pendingQueue.any((task) => task.taskId == taskId)) {
       return;
@@ -255,6 +269,12 @@ class DownloadManager {
     required Song song,
     required String taskId,
   }) async {
+    unawaited(
+      _diag.log(
+        'queue download: taskId=$taskId, songId=${song.id}, title="${song.title}"',
+        scope: 'task',
+      ),
+    );
     final now = DateTime.now();
     _progressByTaskId[taskId] = const _ProgressSnapshot(
       status: DownloadStatus.pending,
@@ -307,6 +327,12 @@ class DownloadManager {
     final filePath = await _buildDownloadFilePath(
       directoryPath: downloadDirectoryPath,
       song: song,
+    );
+    unawaited(
+      _diag.log(
+        'download start: taskId=$taskId, songId=${song.id}, path=$filePath',
+        scope: 'task',
+      ),
     );
 
     try {
@@ -362,11 +388,23 @@ class DownloadManager {
         totalBytes: fileSize,
       );
       _errorByTaskId.remove(taskId);
+      unawaited(
+        _diag.log(
+          'download completed: taskId=$taskId, songId=${song.id}, bytes=$fileSize',
+          scope: 'task',
+        ),
+      );
       unawaited(_prefetchSongArtwork(song));
       _scheduleEmit();
     } catch (error) {
       await _removeFileIfExists(filePath);
       if (_deleteRequestedTaskIds.contains(taskId)) {
+        unawaited(
+          _diag.log(
+            'download deleted during transfer: taskId=$taskId, songId=${song.id}',
+            scope: 'task',
+          ),
+        );
         return;
       }
 
@@ -374,6 +412,19 @@ class DownloadManager {
           cancelToken.isCancelled
               ? _downloadCancelledError
               : _downloadErrorMessage(error);
+      unawaited(
+        _diag.error(
+          'download failed',
+          error,
+          scope: 'task',
+          fields: {
+            'taskId': taskId,
+            'songId': song.id,
+            'title': song.title,
+            'mappedError': errorMessage,
+          },
+        ),
+      );
       _errorByTaskId[taskId] = errorMessage;
       await _markDownloadFailed(taskId, song.id, errorMessage);
     } finally {
@@ -416,6 +467,12 @@ class DownloadManager {
 
   Future<void> _repairDownloadIntegrity() async {
     final downloads = await _dao.getAllDownloads();
+    unawaited(
+      _diag.log(
+        'integrity repair scan: downloads=${downloads.length}',
+        scope: 'repair',
+      ),
+    );
     for (final download in downloads) {
       if (download.status != DownloadStatus.completed.name) {
         continue;
@@ -437,6 +494,13 @@ class DownloadManager {
         download.id,
         download.songId,
         _downloadFileMissingOrInvalidError,
+      );
+      unawaited(
+        _diag.log(
+          'integrity repair flagged invalid download: '
+          'taskId=${download.id}, songId=${download.songId}, path=${download.localPath}',
+          scope: 'repair',
+        ),
       );
     }
   }
@@ -519,7 +583,16 @@ class DownloadManager {
             ),
           );
       return song;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      unawaited(
+        _diag.error(
+          'fetch song by id',
+          error,
+          stackTrace: stackTrace,
+          scope: 'metadata',
+          fields: {'songId': songId},
+        ),
+      );
       return null;
     }
   }
@@ -574,7 +647,20 @@ class DownloadManager {
           continue;
         }
         await cacheManager.downloadFile(coverUrl, key: cacheKey);
-      } catch (_) {
+      } catch (error, stackTrace) {
+        unawaited(
+          _diag.error(
+            'prefetch artwork',
+            error,
+            stackTrace: stackTrace,
+            scope: 'artwork',
+            fields: {
+              'songId': song?.id,
+              'coverArtId': coverArtId,
+              'size': size,
+            },
+          ),
+        );
         // Artwork prefetch is best-effort; a failed image request should not
         // break audio downloads or recovery of completed tasks.
       }

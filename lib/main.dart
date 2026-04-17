@@ -25,6 +25,8 @@ import 'package:sonexa/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 import 'package:sonexa/features/settings/presentation/pages/settings_page.dart';
 
+final _appDiag = DiagnosticLogger.instance.module('app');
+
 class _BootstrapData {
   const _BootstrapData({
     required this.database,
@@ -47,8 +49,11 @@ Future<void> main() async {
         FlutterError.presentError(details);
         final stack = details.stack?.toString() ?? '<no-stack>';
         unawaited(
-          DiagnosticLogger.instance.log(
-            '[FLUTTER_ERROR] ${details.exceptionAsString()}\n$stack',
+          _appDiag.error(
+            'flutter error',
+            details.exceptionAsString(),
+            scope: 'bootstrap',
+            fields: {'stack': stack},
           ),
         );
       };
@@ -81,7 +86,14 @@ Future<void> main() async {
     (error, stackTrace) {
       stderr.writeln('[FATAL] $error');
       stderr.writeln(stackTrace);
-      unawaited(DiagnosticLogger.instance.log('[FATAL] $error\n$stackTrace'));
+      unawaited(
+        _appDiag.error(
+          'fatal zone error',
+          error,
+          stackTrace: stackTrace,
+          scope: 'bootstrap',
+        ),
+      );
     },
     zoneSpecification: ZoneSpecification(
       print: (self, parent, zone, line) {
@@ -134,8 +146,11 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       }
     } catch (error, stackTrace) {
       unawaited(
-        DiagnosticLogger.instance.log(
-          '[DIAG] failed to load startup theme: $error\n$stackTrace',
+        _appDiag.error(
+          'load startup theme',
+          error,
+          stackTrace: stackTrace,
+          scope: 'bootstrap',
         ),
       );
     }
@@ -195,8 +210,10 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       overwrite: !kReleaseMode,
       enabled: diagnosticsEnabled,
     );
-    await DiagnosticLogger.instance.log(
-      '[DIAG] logger initialized: path=${DiagnosticLogger.instance.logFilePath}',
+    await _appDiag.log(
+      'logger initialized: enabled=${DiagnosticLogger.instance.isEnabled}, '
+      'path=${DiagnosticLogger.instance.logFilePath ?? '<null>'}',
+      scope: 'bootstrap',
     );
     await SongAudioCache.instance.ensureInitialized();
   }
@@ -220,7 +237,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
           if (snapshot.hasError || !snapshot.hasData) {
             final error = snapshot.error?.toString() ?? 'Unknown startup error';
             unawaited(
-              DiagnosticLogger.instance.log('[DIAG] bootstrap failed: $error'),
+              _appDiag.log('bootstrap failed: $error', scope: 'bootstrap'),
             );
             return _BootstrapErrorScreen(
               error: error,

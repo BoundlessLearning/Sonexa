@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,95 +17,33 @@ const Duration _lyricsTextAnimationDuration = Duration(milliseconds: 220);
 const Duration _lyricsScrollAnimationDuration = Duration(milliseconds: 280);
 const Duration _lyricsScrubAutoReturnDelay = Duration(seconds: 3);
 
-void _lyricsDiag(String message) {
-  unawaited(DiagnosticLogger.instance.log(message));
-}
-
-String _constraintsSummary(BoxConstraints constraints) {
-  return 'w=${constraints.maxWidth.toStringAsFixed(1)}, '
-      'h=${constraints.maxHeight.toStringAsFixed(1)}, '
-      'bounded=${constraints.hasBoundedWidth}/${constraints.hasBoundedHeight}';
-}
-
-String _mediaItemSummary(MediaItem? item) {
-  if (item == null) {
-    return '<null>';
-  }
-
-  final songId = item.extras?['songId'] as String? ?? item.id;
-  return 'id=${item.id}, songId=$songId, title="${item.title}", '
-      'artist="${item.artist ?? ''}"';
-}
-
 class LyricsDisplay extends ConsumerWidget {
   const LyricsDisplay({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final lyricsRequest = ref.watch(currentLyricsRequestProvider);
-        final showLyrics = ref.watch(showLyricsProvider);
-        final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
-        final currentSong = ref.watch(currentSongProvider);
-        _lyricsDiag(
-          '[DIAG][LYRICS][UI] build: '
-          'showLyrics=$showLyrics, constraints=${_constraintsSummary(constraints)}, '
-          'request=$lyricsRequest, mediaItem=${_mediaItemSummary(currentMediaItem)}, '
-          'currentSong=${currentSong == null ? '<null>' : 'id=${currentSong.id}, title="${currentSong.title}"'}',
-        );
+    final lyricsRequest = ref.watch(currentLyricsRequestProvider);
+    if (lyricsRequest == null) {
+      return _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics);
+    }
 
-        if (lyricsRequest == null) {
-          _lyricsDiag(
-            '[DIAG][LYRICS][UI] placeholder: request=null, '
-            'constraints=${_constraintsSummary(constraints)}',
-          );
+    final lyricsAsync = ref.watch(lyricsProvider(lyricsRequest));
+
+    return lyricsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error:
+          (_, __) =>
+              _LyricsPlaceholder(text: AppLocalizations.of(context).noLyrics),
+      data: (lyrics) {
+        if (lyrics == null || lyrics.lines.isEmpty) {
           return _LyricsPlaceholder(
             text: AppLocalizations.of(context).noLyrics,
           );
         }
 
-        final lyricsAsync = ref.watch(lyricsProvider(lyricsRequest));
-
-        return lyricsAsync.when(
-          loading: () {
-            _lyricsDiag(
-              '[DIAG][LYRICS][UI] loading: songId=${lyricsRequest.songId}, '
-              'constraints=${_constraintsSummary(constraints)}',
-            );
-            return const Center(child: CircularProgressIndicator());
-          },
-          error: (error, _) {
-            _lyricsDiag(
-              '[DIAG][LYRICS][UI] placeholder: error for songId=${lyricsRequest.songId}, '
-              'error=$error, constraints=${_constraintsSummary(constraints)}',
-            );
-            return _LyricsPlaceholder(
-              text: AppLocalizations.of(context).noLyrics,
-            );
-          },
-          data: (lyrics) {
-            if (lyrics == null || lyrics.lines.isEmpty) {
-              _lyricsDiag(
-                '[DIAG][LYRICS][UI] placeholder: empty data for songId=${lyricsRequest.songId}, '
-                'result=${lyrics == null ? '<null>' : 'lines=${lyrics.lines.length}'}, '
-                'constraints=${_constraintsSummary(constraints)}',
-              );
-              return _LyricsPlaceholder(
-                text: AppLocalizations.of(context).noLyrics,
-              );
-            }
-
-            _lyricsDiag(
-              '[DIAG][LYRICS][UI] data: songId=${lyricsRequest.songId}, '
-              'source=${lyrics.source.name}, synced=${lyrics.isSynced}, '
-              'lines=${lyrics.lines.length}, constraints=${_constraintsSummary(constraints)}',
-            );
-            return _SyncedLyricsView(
-              key: ValueKey<String>(lyricsRequest.songId),
-              lyrics: lyrics,
-            );
-          },
+        return _SyncedLyricsView(
+          key: ValueKey<String>(lyricsRequest.songId),
+          lyrics: lyrics,
         );
       },
     );
@@ -151,8 +88,6 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
   bool _isScrubbingLyrics = false;
   bool _showScrubGuide = false;
   Timer? _scrubReturnTimer;
-  DateTime? _lastViewDiagAt;
-  int? _lastViewDiagIndex;
   int _scrollRequestId = 0;
 
   @override
@@ -230,33 +165,6 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
   void _diag(String message) {
     unawaited(DiagnosticLogger.instance.log(message));
-  }
-
-  void _diagViewBuild({
-    required BoxConstraints constraints,
-    required int currentIndex,
-    required Duration position,
-    required int offsetMs,
-  }) {
-    final now = DateTime.now();
-    final shouldLog =
-        _lastViewDiagIndex != currentIndex ||
-        _lastViewDiagAt == null ||
-        now.difference(_lastViewDiagAt!) >= const Duration(seconds: 2);
-    if (!shouldLog) {
-      return;
-    }
-
-    _lastViewDiagIndex = currentIndex;
-    _lastViewDiagAt = now;
-    _diag(
-      '[DIAG][LYRICS][VIEW] build: songId=${widget.lyrics.songId}, '
-      'source=${widget.lyrics.source.name}, synced=${widget.lyrics.isSynced}, '
-      'lines=${widget.lyrics.lines.length}, currentIndex=$currentIndex, '
-      'lastHighlighted=$_lastHighlightedIndex, offsetMs=$offsetMs, '
-      'position=$position, hasClients=${_scrollController.hasClients}, '
-      'constraints=${_constraintsSummary(constraints)}',
-    );
   }
 
   void _scheduleScroll(int index) {
@@ -499,12 +407,6 @@ class _SyncedLyricsViewState extends ConsumerState<_SyncedLyricsView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        _diagViewBuild(
-          constraints: constraints,
-          currentIndex: currentIndex,
-          position: position,
-          offsetMs: offsetMs,
-        );
         final topPadding = constraints.maxHeight * 0.35;
         final bottomPadding = constraints.maxHeight * 0.65;
 

@@ -16,6 +16,8 @@ import 'package:sonexa/features/lyrics/presentation/widgets/lyrics_display.dart'
 import 'package:sonexa/features/player/presentation/providers/favorites_provider.dart';
 import 'package:sonexa/features/player/presentation/providers/player_provider.dart';
 
+final _nowPlayingDiag = DiagnosticLogger.instance.module('player');
+
 class NowPlayingPage extends ConsumerStatefulWidget {
   const NowPlayingPage({super.key});
 
@@ -329,39 +331,22 @@ class _LyricsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
-    final showLyrics = ref.watch(showLyricsProvider);
-    final currentMediaItem = ref.watch(resolvedCurrentMediaItemProvider);
-    final currentSong = ref.watch(currentSongProvider);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        DiagnosticLogger.instance.log(
-          '[DIAG][LYRICS][PAGE] build: showLyrics=$showLyrics, '
-          'constraints=w=${constraints.maxWidth.toStringAsFixed(1)}, '
-          'h=${constraints.maxHeight.toStringAsFixed(1)}, '
-          'currentSong=${currentSong == null ? '<null>' : 'id=${currentSong.id}, title="${currentSong.title}"'}, '
-          'mediaItem=${currentMediaItem == null ? '<null>' : 'id=${currentMediaItem.id}, title="${currentMediaItem.title}"'}',
-        );
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onLongPress: onLongPress,
-          child: Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(top: 8, bottom: 8),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.35,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: const LyricsDisplay(),
-            ),
-          ),
-        );
-      },
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onLongPress,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: const LyricsDisplay(),
+        ),
+      ),
     );
   }
 }
@@ -515,8 +500,9 @@ class _SeekBarState extends ConsumerState<_SeekBar> {
               });
               ref.read(playerSeekIntentProvider.notifier).state =
                   DateTime.now();
-              DiagnosticLogger.instance.log(
-                '[OP] seek_bar_change_end: seconds=${value.toInt()}',
+              _nowPlayingDiag.event(
+                'seek_bar_change_end',
+                fields: {'seconds': value.toInt()},
               );
               widget.audioHandler.seek(Duration(seconds: value.toInt()));
             },
@@ -584,7 +570,7 @@ class _PlaybackControls extends ConsumerWidget {
                     iconSize: 36,
                     color: colorScheme.onSurface,
                     onPressed: () {
-                      DiagnosticLogger.instance.log('[OP] previous_button_tap');
+                      _nowPlayingDiag.event('previous_button_tap');
                       audioHandler.skipToPrevious();
                     },
                   ),
@@ -593,7 +579,7 @@ class _PlaybackControls extends ConsumerWidget {
                     onPressed: () {
                       final action =
                           playing ? 'pause_button_tap' : 'play_button_tap';
-                      DiagnosticLogger.instance.log('[OP] $action');
+                      _nowPlayingDiag.event(action);
                       if (playing) {
                         audioHandler.pause();
                       } else {
@@ -627,7 +613,7 @@ class _PlaybackControls extends ConsumerWidget {
                     iconSize: 36,
                     color: colorScheme.onSurface,
                     onPressed: () {
-                      DiagnosticLogger.instance.log('[OP] next_button_tap');
+                      _nowPlayingDiag.event('next_button_tap');
                       audioHandler.skipToNext();
                     },
                   ),
@@ -714,8 +700,9 @@ class _PlayModeButton extends ConsumerWidget {
           PlayMode.repeatOne => PlayMode.repeatAll,
           PlayMode.repeatAll => PlayMode.sequential,
         };
-        DiagnosticLogger.instance.log(
-          '[OP] play_mode_switch: $mode -> $nextMode',
+        _nowPlayingDiag.event(
+          'play_mode_switch',
+          fields: {'from': mode.name, 'to': nextMode.name},
         );
         ref.read(playModeProvider.notifier).state = nextMode;
 
