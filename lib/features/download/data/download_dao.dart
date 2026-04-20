@@ -11,15 +11,14 @@ class DownloadDao {
   }
 
   Future<void> updateDownloadStatus(String id, String status) async {
-    await (_db.update(_db.downloads)..where((tbl) => tbl.id.equals(id))).write(
-      DownloadsCompanion(status: Value(status)),
-    );
+    await (_db.update(_db.downloads)..where(
+      (tbl) => tbl.id.equals(id),
+    )).write(DownloadsCompanion(status: Value(status)));
   }
 
   Future<List<Download>> getAllDownloads() {
     return (_db.select(_db.downloads)
-          ..orderBy([(tbl) => OrderingTerm.desc(tbl.downloadedAt)]))
-        .get();
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.downloadedAt)])).get();
   }
 
   Future<Download?> getDownloadBySongId(String songId) {
@@ -36,7 +35,6 @@ class DownloadDao {
 
   Stream<List<Download>> watchAllDownloads() {
     return (_db.select(_db.downloads)
-          ..orderBy([(tbl) => OrderingTerm.desc(tbl.downloadedAt)]))
-        .watch();
+      ..orderBy([(tbl) => OrderingTerm.desc(tbl.downloadedAt)])).watch();
   }
 }

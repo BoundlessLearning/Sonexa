@@ -13,7 +13,8 @@ abstract class LyricLine with _$LyricLine {
     String? translation,
   }) = _LyricLine;
 
-  factory LyricLine.fromJson(Map<String, dynamic> json) => _$LyricLineFromJson(json);
+  factory LyricLine.fromJson(Map<String, dynamic> json) =>
+      _$LyricLineFromJson(json);
 }
 
 @freezed

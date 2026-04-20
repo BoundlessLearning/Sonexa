@@ -8,10 +8,7 @@ class AppTheme {
       colorSchemeSeed: _seedColor,
       brightness: Brightness.light,
       useMaterial3: true,
-      appBarTheme: const AppBarTheme(
-        elevation: 0,
-        scrolledUnderElevation: 1,
-      ),
+      appBarTheme: const AppBarTheme(elevation: 0, scrolledUnderElevation: 1),
     );
   }
 
@@ -20,10 +17,7 @@ class AppTheme {
       colorSchemeSeed: _seedColor,
       brightness: Brightness.dark,
       useMaterial3: true,
-      appBarTheme: const AppBarTheme(
-        elevation: 0,
-        scrolledUnderElevation: 1,
-      ),
+      appBarTheme: const AppBarTheme(elevation: 0, scrolledUnderElevation: 1),
     );
   }
 }

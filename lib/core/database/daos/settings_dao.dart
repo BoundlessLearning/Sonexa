@@ -5,12 +5,14 @@ import '../app_database.dart';
 part 'settings_dao.g.dart';
 
 @DriftAccessor(tables: [AppSettings, ServerConfigs])
-class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin {
+class SettingsDao extends DatabaseAccessor<AppDatabase>
+    with _$SettingsDaoMixin {
   SettingsDao(super.db);
 
   Future<String?> getSetting(String key) async {
     final setting =
-        await (select(appSettings)..where((tbl) => tbl.key.equals(key))).getSingleOrNull();
+        await (select(appSettings)
+          ..where((tbl) => tbl.key.equals(key))).getSingleOrNull();
     return setting?.value;
   }
 
@@ -21,7 +23,8 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
   }
 
   Future<ServerConfig?> getActiveServer() {
-    return (select(serverConfigs)..where((tbl) => tbl.isActive.equals(true))).getSingleOrNull();
+    return (select(serverConfigs)
+      ..where((tbl) => tbl.isActive.equals(true))).getSingleOrNull();
   }
 
   Future<List<ServerConfig>> getAllServers() => select(serverConfigs).get();
@@ -32,12 +35,12 @@ class SettingsDao extends DatabaseAccessor<AppDatabase> with _$SettingsDaoMixin 
 
   Future<void> setActiveServer(String id) async {
     await transaction(() async {
-      await update(serverConfigs).write(
-        const ServerConfigsCompanion(isActive: Value(false)),
-      );
-      await (update(serverConfigs)..where((tbl) => tbl.id.equals(id))).write(
-        const ServerConfigsCompanion(isActive: Value(true)),
-      );
+      await update(
+        serverConfigs,
+      ).write(const ServerConfigsCompanion(isActive: Value(false)));
+      await (update(serverConfigs)..where(
+        (tbl) => tbl.id.equals(id),
+      )).write(const ServerConfigsCompanion(isActive: Value(true)));
     });
   }
 

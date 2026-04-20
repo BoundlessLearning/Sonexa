@@ -21,5 +21,6 @@ abstract class Playlist with _$Playlist {
     @Default([]) List<Song> songs,
   }) = _Playlist;
 
-  factory Playlist.fromJson(Map<String, dynamic> json) => _$PlaylistFromJson(json);
+  factory Playlist.fromJson(Map<String, dynamic> json) =>
+      _$PlaylistFromJson(json);
 }

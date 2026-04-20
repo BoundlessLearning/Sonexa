@@ -22,5 +22,6 @@ abstract class DownloadTask with _$DownloadTask {
     String? error,
   }) = _DownloadTask;
 
-  factory DownloadTask.fromJson(Map<String, dynamic> json) => _$DownloadTaskFromJson(json);
+  factory DownloadTask.fromJson(Map<String, dynamic> json) =>
+      _$DownloadTaskFromJson(json);
 }

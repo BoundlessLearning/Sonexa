@@ -1,6 +1,8 @@
 import 'package:sonexa/features/lyrics/domain/entities/lyrics.dart';
 
-final RegExp _lrcTimestampRegExp = RegExp(r'\[(\d{2}):(\d{2})\.?((?:\d{0,3}))\]');
+final RegExp _lrcTimestampRegExp = RegExp(
+  r'\[(\d{2}):(\d{2})\.?((?:\d{0,3}))\]',
+);
 final RegExp _lrcMetadataRegExp = RegExp(
   r'^\[(ti|ar|al|by):.*\]$',
   caseSensitive: false,

@@ -15,23 +15,23 @@ import 'package:sonexa/core/utils/diagnostic_logger.dart';
 /// 2. 将系统层的播放/暂停/切歌按钮回传给 MusicAudioHandler
 class WindowsMediaControls {
   WindowsMediaControls._(this._audioHandler)
-      : _smtc = SMTCWindows(
-          config: const SMTCConfig(
-            playEnabled: true,
-            pauseEnabled: true,
-            nextEnabled: true,
-            prevEnabled: true,
-            stopEnabled: true,
-            fastForwardEnabled: false,
-            rewindEnabled: false,
-          ),
-          status: PlaybackStatus.Stopped,
-          timeline: const PlaybackTimeline(
-            startTimeMs: 0,
-            endTimeMs: 0,
-            positionMs: 0,
-          ),
-        );
+    : _smtc = SMTCWindows(
+        config: const SMTCConfig(
+          playEnabled: true,
+          pauseEnabled: true,
+          nextEnabled: true,
+          prevEnabled: true,
+          stopEnabled: true,
+          fastForwardEnabled: false,
+          rewindEnabled: false,
+        ),
+        status: PlaybackStatus.Stopped,
+        timeline: const PlaybackTimeline(
+          startTimeMs: 0,
+          endTimeMs: 0,
+          positionMs: 0,
+        ),
+      );
 
   static WindowsMediaControls? _instance;
 
@@ -83,13 +83,11 @@ class WindowsMediaControls {
       unawaited(_syncTimeline());
     });
 
-    await DiagnosticLogger.instance
-        .log('[DIAG] Windows SMTC initialized');
+    await DiagnosticLogger.instance.log('[DIAG] Windows SMTC initialized');
   }
 
   Future<void> _handleButtonPress(PressedButton event) async {
-    await DiagnosticLogger.instance
-        .log('[OP] windows_smtc_button: $event');
+    await DiagnosticLogger.instance.log('[OP] windows_smtc_button: $event');
     switch (event) {
       case PressedButton.play:
         await _audioHandler.play();
@@ -130,8 +128,8 @@ class WindowsMediaControls {
   Future<void> _syncPlaybackState(PlaybackState state) async {
     final status = switch (state.processingState) {
       AudioProcessingState.idle => PlaybackStatus.Stopped,
-      AudioProcessingState.loading || AudioProcessingState.buffering =>
-        PlaybackStatus.Changing,
+      AudioProcessingState.loading ||
+      AudioProcessingState.buffering => PlaybackStatus.Changing,
       AudioProcessingState.ready || AudioProcessingState.completed =>
         state.playing ? PlaybackStatus.Playing : PlaybackStatus.Paused,
       AudioProcessingState.error => PlaybackStatus.Stopped,

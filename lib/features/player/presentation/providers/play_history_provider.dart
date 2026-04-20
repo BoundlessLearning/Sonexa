@@ -40,16 +40,18 @@ class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
     int listenDurationSec,
   ) async {
     // 先记录播放历史，再根据播放时长决定是否 scrobble。
-    await _database.into(_database.playHistory).insert(
-      PlayHistoryCompanion.insert(
-        songId: songId,
-        songTitle: title,
-        artist: artist,
-        albumId: albumId,
-        playedAt: DateTime.now(),
-        listenDurationSec: listenDurationSec,
-      ),
-    );
+    await _database
+        .into(_database.playHistory)
+        .insert(
+          PlayHistoryCompanion.insert(
+            songId: songId,
+            songTitle: title,
+            artist: artist,
+            albumId: albumId,
+            playedAt: DateTime.now(),
+            listenDurationSec: listenDurationSec,
+          ),
+        );
 
     if (listenDurationSec >= 30) {
       final api = await ref.read(subsonicApiClientProvider.future);
@@ -85,13 +87,15 @@ class PlayHistoryNotifier extends AsyncNotifier<List<PlayHistoryData>> {
     // [Round7-F4] 如果歌曲 ID 没变，说明是 shuffle/seek/恢复等操作触发的
     // index 变化，不是真正的切歌，跳过历史记录。
     final nextSongId = nextItem?.extras?['songId'] as String? ?? nextItem?.id;
-    final prevSongId = previousItem?.extras?['songId'] as String? ?? previousItem?.id;
+    final prevSongId =
+        previousItem?.extras?['songId'] as String? ?? previousItem?.id;
     if (nextSongId != null && nextSongId == prevSongId) {
       return;
     }
 
     if (previousItem != null && previousStartTime != null) {
-      final listenedSeconds = DateTime.now().difference(previousStartTime).inSeconds;
+      final listenedSeconds =
+          DateTime.now().difference(previousStartTime).inSeconds;
       final previousAlbumId = previousItem.extras?['albumId'] as String? ?? '';
 
       if (prevSongId != null && prevSongId.isNotEmpty && listenedSeconds > 0) {

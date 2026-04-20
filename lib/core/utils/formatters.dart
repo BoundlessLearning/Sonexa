@@ -21,7 +21,10 @@ String formatFileSize(int bytes) {
   }
 
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  final exponent = math.min(bytes == 0 ? 0 : (math.log(bytes) / math.log(1024)).floor(), units.length - 1);
+  final exponent = math.min(
+    bytes == 0 ? 0 : (math.log(bytes) / math.log(1024)).floor(),
+    units.length - 1,
+  );
   final size = bytes / math.pow(1024, exponent);
   final fractionDigits = size >= 10 || exponent == 0 ? 0 : 1;
 

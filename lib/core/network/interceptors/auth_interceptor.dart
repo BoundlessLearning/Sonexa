@@ -25,7 +25,8 @@ class SubsonicAuthInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final requestUri = options.uri;
-    final matchesBaseHost = !requestUri.hasScheme ||
+    final matchesBaseHost =
+        !requestUri.hasScheme ||
         (requestUri.scheme == _baseUri.scheme &&
             requestUri.host == _baseUri.host &&
             requestUri.port == _baseUri.port);

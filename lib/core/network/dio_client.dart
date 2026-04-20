@@ -13,10 +13,7 @@ Dio createDioClient() {
 
   if (kDebugMode) {
     dio.interceptors.add(
-      LogInterceptor(
-        requestBody: false,
-        responseBody: false,
-      ),
+      LogInterceptor(requestBody: false, responseBody: false),
     );
   }
 

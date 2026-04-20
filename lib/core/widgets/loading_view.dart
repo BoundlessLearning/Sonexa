@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 
 /// 通用加载状态组件 — 居中进度指示器，可选消息
 class LoadingView extends StatelessWidget {
-  const LoadingView({
-    super.key,
-    this.message,
-  });
+  const LoadingView({super.key, this.message});
 
   /// 加载提示文字（可选）
   final String? message;

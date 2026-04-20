@@ -16,19 +16,17 @@ class SubsonicApiClient {
     required String baseUrl,
     required this.username,
     required this.password,
-  })  : _dio = dio,
-        baseUrl = _normalizeBaseUrl(baseUrl),
-        _restBaseUrl = '${_normalizeBaseUrl(baseUrl)}/rest/' {
+  }) : _dio = dio,
+       baseUrl = _normalizeBaseUrl(baseUrl),
+       _restBaseUrl = '${_normalizeBaseUrl(baseUrl)}/rest/' {
     // baseUrl 必须以 / 结尾，否则 Dio 会按 URI 规范替换最后一段路径
     _dio.options = _dio.options.copyWith(baseUrl: _restBaseUrl);
     _dio.interceptors.removeWhere(
       (interceptor) =>
-          interceptor is SubsonicAuthInterceptor || interceptor is RetryInterceptor,
+          interceptor is SubsonicAuthInterceptor ||
+          interceptor is RetryInterceptor,
     );
-    _dio.interceptors.insert(
-      0,
-      RetryInterceptor(_dio),
-    );
+    _dio.interceptors.insert(0, RetryInterceptor(_dio));
     _dio.interceptors.insert(
       0,
       SubsonicAuthInterceptor(
@@ -56,30 +54,19 @@ class SubsonicApiClient {
 
   Future<Map<String, dynamic>> getArtists() => _get('getArtists');
 
-  Future<Map<String, dynamic>> getArtist(String id) => _get(
-        'getArtist',
-        params: {'id': id},
-      );
+  Future<Map<String, dynamic>> getArtist(String id) =>
+      _get('getArtist', params: {'id': id});
 
-  Future<Map<String, dynamic>> getAlbum(String id) => _get(
-        'getAlbum',
-        params: {'id': id},
-      );
+  Future<Map<String, dynamic>> getAlbum(String id) =>
+      _get('getAlbum', params: {'id': id});
 
-  Future<Map<String, dynamic>> getSong(String id) => _get(
-        'getSong',
-        params: {'id': id},
-      );
+  Future<Map<String, dynamic>> getSong(String id) =>
+      _get('getSong', params: {'id': id});
 
   Future<Map<String, dynamic>> getGenres() => _get('getGenres');
 
-  Future<Map<String, dynamic>> getArtistInfo2(String id, {int count = 20}) => _get(
-        'getArtistInfo2',
-        params: {
-          'id': id,
-          'count': count,
-        },
-      );
+  Future<Map<String, dynamic>> getArtistInfo2(String id, {int count = 20}) =>
+      _get('getArtistInfo2', params: {'id': id, 'count': count});
 
   Future<Map<String, dynamic>> getAlbumList2({
     required String type,
@@ -108,10 +95,7 @@ class SubsonicApiClient {
     return _get('getAlbumList2', params: params);
   }
 
-  Future<Map<String, dynamic>> getRandomSongs({
-    int size = 20,
-    String? genre,
-  }) {
+  Future<Map<String, dynamic>> getRandomSongs({int size = 20, String? genre}) {
     final params = <String, dynamic>{'size': size};
     if (genre != null) {
       params['genre'] = genre;
@@ -122,21 +106,13 @@ class SubsonicApiClient {
 
   Future<Map<String, dynamic>> getStarred2() => _get('getStarred2');
 
-  Future<Map<String, dynamic>> getSimilarSongs2(String id, {int count = 50}) => _get(
-        'getSimilarSongs2',
-        params: {
-          'id': id,
-          'count': count,
-        },
-      );
+  Future<Map<String, dynamic>> getSimilarSongs2(String id, {int count = 50}) =>
+      _get('getSimilarSongs2', params: {'id': id, 'count': count});
 
-  Future<Map<String, dynamic>> getTopSongs(String artistName, {int count = 50}) => _get(
-        'getTopSongs',
-        params: {
-          'artist': artistName,
-          'count': count,
-        },
-      );
+  Future<Map<String, dynamic>> getTopSongs(
+    String artistName, {
+    int count = 50,
+  }) => _get('getTopSongs', params: {'artist': artistName, 'count': count});
 
   Future<Map<String, dynamic>> search3({
     required String query,
@@ -163,10 +139,8 @@ class SubsonicApiClient {
 
   Future<Map<String, dynamic>> getPlaylists() => _get('getPlaylists');
 
-  Future<Map<String, dynamic>> getPlaylist(String id) => _get(
-        'getPlaylist',
-        params: {'id': id},
-      );
+  Future<Map<String, dynamic>> getPlaylist(String id) =>
+      _get('getPlaylist', params: {'id': id});
 
   Future<void> createPlaylist({
     required String name,
@@ -217,9 +191,9 @@ class SubsonicApiClient {
       queryParameters['format'] = format;
     }
 
-    return Uri.parse('${_restBaseUrl}stream.view')
-        .replace(queryParameters: queryParameters)
-        .toString();
+    return Uri.parse(
+      '${_restBaseUrl}stream.view',
+    ).replace(queryParameters: queryParameters).toString();
   }
 
   String getCoverArtUrl(String? coverArtId, {int size = 300}) {
@@ -233,9 +207,9 @@ class SubsonicApiClient {
       'size': '$size',
     };
 
-    return Uri.parse('${_restBaseUrl}getCoverArt.view')
-        .replace(queryParameters: queryParameters)
-        .toString();
+    return Uri.parse(
+      '${_restBaseUrl}getCoverArt.view',
+    ).replace(queryParameters: queryParameters).toString();
   }
 
   Future<Response> downloadSong(
@@ -257,11 +231,7 @@ class SubsonicApiClient {
     }
   }
 
-  Future<void> star({
-    String? songId,
-    String? albumId,
-    String? artistId,
-  }) async {
+  Future<void> star({String? songId, String? albumId, String? artistId}) async {
     await _get(
       'star',
       params: _buildAnnotationParams(
@@ -288,17 +258,15 @@ class SubsonicApiClient {
   }
 
   Future<void> scrobble(String songId, {bool submission = true}) async {
-    await _get(
-      'scrobble',
-      params: {
-        'id': songId,
-        'submission': submission,
-      },
-    );
+    await _get('scrobble', params: {'id': songId, 'submission': submission});
   }
 
-  Future<Map<String, dynamic>?> getLyrics({String? artist, String? title}) async {
-    if ((artist == null || artist.isEmpty) && (title == null || title.isEmpty)) {
+  Future<Map<String, dynamic>?> getLyrics({
+    String? artist,
+    String? title,
+  }) async {
+    if ((artist == null || artist.isEmpty) &&
+        (title == null || title.isEmpty)) {
       return null;
     }
 
@@ -319,10 +287,7 @@ class SubsonicApiClient {
       return null;
     }
 
-    final response = await _get(
-      'getLyricsBySongId',
-      params: {'id': songId},
-    );
+    final response = await _get('getLyricsBySongId', params: {'id': songId});
 
     final payload = response.payloadFor('lyricsList');
     if (payload is! Map<String, dynamic>) {

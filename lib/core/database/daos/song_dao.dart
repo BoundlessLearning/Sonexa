@@ -11,7 +11,8 @@ class SongDao extends DatabaseAccessor<AppDatabase> with _$SongDaoMixin {
   Future<List<CachedSong>> getAllSongs() => select(cachedSongs).get();
 
   Future<CachedSong?> getSongById(String id) {
-    return (select(cachedSongs)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(cachedSongs)
+      ..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Future<void> insertSong(CachedSongsCompanion song) async {
@@ -25,15 +26,14 @@ class SongDao extends DatabaseAccessor<AppDatabase> with _$SongDaoMixin {
   }
 
   Future<void> updateSongLocalPath(String id, String? path) async {
-    await (update(cachedSongs)..where((tbl) => tbl.id.equals(id))).write(
-      CachedSongsCompanion(
-        localFilePath: Value(path),
-      ),
-    );
+    await (update(cachedSongs)..where(
+      (tbl) => tbl.id.equals(id),
+    )).write(CachedSongsCompanion(localFilePath: Value(path)));
   }
 
   Future<List<CachedSong>> getDownloadedSongs() {
-    return (select(cachedSongs)..where((tbl) => tbl.localFilePath.isNotNull())).get();
+    return (select(cachedSongs)
+      ..where((tbl) => tbl.localFilePath.isNotNull())).get();
   }
 
   Future<int> deleteSong(String id) {
