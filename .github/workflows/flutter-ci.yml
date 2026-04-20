@@ -2,10 +2,24 @@ name: Flutter CI
 
 on:
   pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'README.en.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'docs/**'
+      - 'release-assets/**'
   push:
     branches:
       - main
       - master
+    paths-ignore:
+      - 'README.md'
+      - 'README.en.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'docs/**'
+      - 'release-assets/**'
   workflow_dispatch:
 
 jobs:

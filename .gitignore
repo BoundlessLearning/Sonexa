@@ -56,6 +56,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.android/
 
 # Test artifacts
 /test_all_api.dart
