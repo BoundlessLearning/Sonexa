@@ -63,3 +63,6 @@ Thumbs.db
 # Local design/reference assets
 /icon.png
 /startpage.png
+
+# Local release artifacts
+/release-assets/
